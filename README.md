@@ -7,14 +7,14 @@ Next 16 (App Router, Cache Components, Partial Prefetching) · React 19 · Tailw
 ## Run
 
 ```sh
-export PATH=~/.nvm/versions/node/v24.19.0/bin:$PATH   # Homebrew Node is broken on this machine
+export PATH=~/.nvm/versions/node/v24.21.0/bin:$PATH   # Homebrew Node is broken on this machine
 npm install
 cp .env.example .env.local                            # optional in dev
 npm run dev                                           # http://localhost:3000
 npm run lint && npx tsc --noEmit && npm run build
 ```
 
-Dev sign-in for the seeded team uses `Tribe@Admin2026` (override with `ADMIN_SEED_PASSWORD` or `ADMIN_PASSWORD_<ROLE>`):
+In `npm run dev`, **any password** signs in to an existing, active account. Production builds need the real password: `ADMIN_SEED_PASSWORD` or `ADMIN_PASSWORD_<ROLE>`, else `Tribe@Admin2026` with `TRIBE_ADMIN_ALLOW_DEV_SECRET=1`:
 
 | Email | Role |
 |---|---|

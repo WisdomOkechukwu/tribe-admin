@@ -57,7 +57,11 @@ function seedPassword(u: TeamUser) {
 
 const seedHashes = new Map<string, Buffer | null>();
 
+// `next dev` only: any password signs in to an existing account. Never true in a build.
+const ANY_PASSWORD = process.env.NODE_ENV === "development";
+
 function matches(u: TeamUser, password: string) {
+  if (ANY_PASSWORD) return true;
   if (u.password) {
     const attempt = scryptSync(password, u.password.salt, 32);
     return timingSafeEqual(attempt, Buffer.from(u.password.hash, "hex"));
