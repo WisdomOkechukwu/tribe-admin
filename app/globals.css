@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+/* Dark mode follows data-theme on <html> (set before paint by the inline
+   script in app/layout.tsx), so `dark:` utilities track the admin's choice. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* static: emit every token, since charts, coin faces and KYC art read
+   var(--color-*) at runtime, not only through utility classes. */
+@theme static {
+  /* Brand scales, copied from the landing site (Colors.png). */
+  --color-paper: #fbf8f5;
+
+  --color-purple-50: #f0e7f7;
+  --color-purple-100: #d1b4e5;
+  --color-purple-200: #ba90d9;
+  --color-purple-300: #9b5dc7;
+  --color-purple-400: #873dbd;
+  --color-purple-500: #690dac;
+  --color-purple-600: #600c9d;
+  --color-purple-700: #4b097a;
+  --color-purple-800: #3a075f;
+  --color-purple-900: #2c0548;
+
+  --color-orange-50: #ffefe9;
+  --color-orange-100: #ffceba;
+  --color-orange-200: #ffb798;
+  --color-orange-300: #ff966a;
+  --color-orange-400: #ff814d;
+  --color-orange-500: #ff6220;
+  --color-orange-600: #e8591d;
+  --color-orange-700: #b54617;
+  --color-orange-800: #8c3612;
+  --color-orange-900: #6b290d;
+
+  --color-ink-50: #ededed;
+  --color-ink-100: #c7c7c7;
+  --color-ink-200: #acacac;
+  --color-ink-300: #868686;
+  --color-ink-400: #6f6e6e;
+  --color-ink-500: #4b4a4a;
+  --color-ink-600: #444343;
+  --color-ink-700: #353535;
+  --color-ink-800: #292929;
+  --color-ink-900: #201f1f;
+
+  --color-success-50: #eaf6ed;
+  --color-success-100: #bde2c7;
+  --color-success-300: #71c185;
+  --color-success-500: #2ba349;
+  --color-success-600: #279442;
+  --color-success-700: #1f7434;
+  --color-success-900: #12441f;
+
+  --color-error-50: #ffe8e8;
+  --color-error-500: #ff1919;
+  --color-error-600: #e81717;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-200: #ffeaa2;
+  --color-warning-300: #ffe678;
+  --color-warning-500: #ffda35;
+  --color-warning-700: #b59b26;
+
+  --color-blue-50: #e6f4ff;
+  --color-blue-300: #54b8ff;
+  --color-blue-500: #0095ff;
+  --color-blue-600: #0088e8;
+  --color-blue-700: #006ab5;
+  --color-blue-900: #003f6b;
+
+  /* Semantic surfaces: values swap per theme below. */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-edge: var(--edge);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-poppins), sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Same shape language as the landing site, a notch tighter for dense UI. */
+  --radius-chip: 12px;
+  --radius-card: 20px;
+  --radius-panel: 28px;
+
+  /* Gen-Z "sticker" depth: hard offset shadows in ink, not blur. */
+  --shadow-hard: 4px 4px 0 0 var(--hard);
+  --shadow-hard-sm: 2px 2px 0 0 var(--hard);
+  --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.04), 0 4px 14px -8px rgb(44 5 72 / 0.22);
+  --shadow-pop: 0 30px 70px -20px rgb(44 5 72 / 0.45), 0 0 0 1px rgb(32 31 31 / 0.06);
+  --shadow-float: 0 50px 100px -45px rgb(20 0 40 / 0.6);
+}
+
+:root {
+  /* Categorical chart slots, validated (dataviz validator) on the light surface. */
+  --cat-1: var(--color-purple-400);
+  --cat-2: var(--color-orange-500);
+  --cat-3: var(--color-blue-500);
+  --cat-4: var(--color-success-500);
+  --cat-5: var(--color-orange-700);
+  --bg: var(--color-paper);
+  --surface: #ffffff;
+  --sunken: #f7f2f9;
+  --line: #ebe4ef;
+  --edge: var(--color-ink-900);
+  --hard: var(--color-ink-900);
+  --dot: rgb(105 13 172 / 0.09);
+  --fg: var(--color-ink-900);
+  --muted: var(--color-ink-400);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  /* Re-stepped for the dark surface (validated separately). */
+  --cat-1: var(--color-purple-300);
+  --cat-2: var(--color-orange-600);
+  --cat-3: var(--color-blue-500);
+  --cat-4: var(--color-success-500);
+  --cat-5: var(--color-orange-700);
+  --bg: #0b0612;
+  --surface: #15101d;
+  --sunken: #1c1526;
+  --line: #2a2233;
+  --edge: #4a3b5c;
+  --hard: #000000;
+  --dot: rgb(186 144 217 / 0.07);
+  --fg: #f6f1fa;
+  --muted: #a99fb3;
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--bg);
+  /* Dot-grid paper texture. */
+  background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom focus ring everywhere, never the browser default. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--color-purple-400);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Thin branded scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted) 45%, transparent) transparent;
+}
+
+::selection {
+  background: var(--color-purple-100);
+  color: var(--color-purple-900);
+}
+
+@utility display {
+  font-family: var(--font-display);
+  font-variation-settings: "wdth" 80;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@utility press {
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/*
+ * Affordance rule for the whole console:
+ *   card  = static information: flat ink outline, NO shadow.
+ *   pop   = clickable: ink outline + hard shadow that lifts on hover, presses in.
+ *   link  = inline link: thick underline that turns orange on hover.
+ * Shadow means "you can press this". Never put a hard shadow on static content.
+ */
+@utility card {
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: var(--radius-card);
+}
+
+/* Pressable sticker button: shadow collapses when pressed. */
+@utility pop {
+  border: 2px solid var(--edge);
+  box-shadow: var(--shadow-hard-sm);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+  &:hover:not(:disabled) {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 0 var(--hard);
+  }
+  &:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 0 var(--hard);
+  }
+}
+
+@utility link {
+  font-weight: 600;
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-purple-200);
+  cursor: pointer;
+  &:hover {
+    text-decoration-color: var(--color-orange-500);
+  }
+}
+
+/* Logo-derived diagonal bands; used once, on the login panel. */
+@utility stripes {
+  background-image: repeating-linear-gradient(
+    118deg,
+    var(--stripe-a, var(--color-purple-500)) 0 var(--stripe-w, 44px),
+    transparent var(--stripe-w, 44px) calc(var(--stripe-w, 44px) * 1.35),
+    var(--stripe-b, var(--color-orange-500)) calc(var(--stripe-w, 44px) * 1.35) calc(var(--stripe-w, 44px) * 2.35),
+    transparent calc(var(--stripe-w, 44px) * 2.35) calc(var(--stripe-w, 44px) * 2.7)
+  );
+}
+
+@utility shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--sunken) 0%,
+    color-mix(in oklab, var(--line) 70%, var(--surface)) 50%,
+    var(--sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+/* Long tables: let the browser skip layout/paint for off-screen rows. */
+@utility row-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes nav-stripes {
+  to {
+    background-position: 27px 0;
+  }
+}
+
+@keyframes coin {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+dialog::backdrop {
+  background: rgb(20 0 40 / 0.45);
+}
