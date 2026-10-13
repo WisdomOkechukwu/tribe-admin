@@ -19,7 +19,6 @@ export const metadata: Metadata = {
   title: { default: "Tribe Admin", template: "%s · Tribe Admin" },
   description: "Internal operations console for Tribe.",
   robots: { index: false, follow: false },
-  icons: { icon: "/brand/tribe-icon.png" },
 };
 
 // Runs before first paint so the stored theme never flashes (see Next's
