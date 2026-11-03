@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
     agentFeedback: true,
+    agentUpgrade: "security",
   },
   cacheComponents: true,
   // "Find customer" was merged into /customers; keep old links working.
