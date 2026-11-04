@@ -1,5 +1,4 @@
-import { ASSETS } from "./domain/catalog";
-import type { AssetCode } from "./domain/types";
+import { assetInfo } from "./domain/catalog";
 
 // Formatters are expensive to build; memoise one per shape. Times render in
 // Lagos time on both server and client so SSR output never mismatches.
@@ -20,28 +19,50 @@ function nf(min: number, max: number, compact = false) {
   return f;
 }
 
+/** A number, or an exact decimal string from the API ("12.50"). Strings are formatted without float rounding. */
+export type Num = number | string;
+
+const asNum = (n: Num): number | Intl.StringNumericLiteral => (typeof n === "string" ? ((n.trim() || "0") as Intl.StringNumericLiteral) : n);
+/** -1, 0 or 1. Works on decimal strings without parsing them into floats. */
+export function signOf(n: Num): -1 | 0 | 1 {
+  if (typeof n === "number") return n > 0 ? 1 : n < 0 ? -1 : 0;
+  const t = n.trim();
+  if (!/[1-9]/.test(t)) return 0;
+  return t.startsWith("-") ? -1 : 1;
+}
+const absOf = (n: Num): Num => (typeof n === "number" ? Math.abs(n) : n.trim().replace(/^[-+]/, ""));
+
 /** Amount with the asset's precision. Crypto trims trailing zeros. */
-export function fmtAmount(asset: AssetCode, n: number) {
-  const a = ASSETS[asset];
-  return a.kind === "crypto" && a.decimals > 2 ? nf(2, a.decimals).format(n) : nf(2, 2).format(n);
+export function fmtAmount(asset: string, n: Num) {
+  const a = assetInfo(asset);
+  return a.kind === "crypto" && a.decimals > 2 ? nf(2, a.decimals).format(asNum(n)) : nf(2, 2).format(asNum(n));
 }
 
-export function fmtMoney(asset: AssetCode, n: number, opts: { sign?: boolean } = {}) {
-  const sign = opts.sign ? (n > 0 ? "+" : n < 0 ? "−" : "") : n < 0 ? "−" : "";
-  const abs = Math.abs(n);
-  const a = ASSETS[asset];
-  return a.kind === "fiat" ? `${sign}${a.symbol}${fmtAmount(asset, abs)}` : `${sign}${fmtAmount(asset, abs)} ${asset}`;
+export function fmtMoney(asset: string, n: Num, opts: { sign?: boolean } = {}) {
+  const s = signOf(n);
+  const sign = opts.sign ? (s > 0 ? "+" : s < 0 ? "−" : "") : s < 0 ? "−" : "";
+  const abs = absOf(n);
+  const a = assetInfo(asset);
+  return a.kind === "fiat" && a.symbol !== a.code ? `${sign}${a.symbol}${fmtAmount(asset, abs)}` : `${sign}${fmtAmount(asset, abs)} ${a.code}`;
 }
 
-export const fmtCompact = (n: number) => nf(0, 1, true).format(n);
-export const fmtInt = (n: number) => nf(0, 0).format(n);
-export const fmtPct = (n: number, digits = 2) => `${nf(0, digits).format(n)}%`;
-export const fmtUsd = (n: number) => `$${nf(2, 2).format(n)}`;
-export const fmtNgnCompact = (n: number) => `₦${fmtCompact(n)}`;
+/** Plain number from a decimal string, for charts and ratios only (never for money maths). */
+export const toNum = (n: Num | null | undefined) => {
+  const v = typeof n === "number" ? n : Number(n ?? 0);
+  return Number.isFinite(v) ? v : 0;
+};
 
-export function fmtRate(n: number) {
+export const fmtCompact = (n: Num) => nf(0, 1, true).format(asNum(n));
+export const fmtInt = (n: Num) => nf(0, 0).format(asNum(n));
+export const fmtPct = (n: Num, digits = 2) => `${nf(0, digits).format(asNum(n))}%`;
+export const fmtUsd = (n: Num) => `$${nf(2, 2).format(asNum(n))}`;
+export const fmtNgnCompact = (n: Num) => `₦${fmtCompact(n)}`;
+
+export function fmtRate(value: Num) {
+  const n = toNum(value);
   if (n >= 100) return nf(2, 2).format(n);
   if (n >= 1) return nf(2, 4).format(n);
+  if (n === 0) return "0";
   return nf(2, 10).format(Number(n.toPrecision(6)));
 }
 

@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { AccessSync } from "@/components/access/AccessSyncServer";
+import { KycPendingSync } from "@/components/kyc/KycPendingSync";
 import { MarkupHost } from "@/components/markups/MarkupHost";
 import { AdminMenu, AdminMenuSkeleton } from "@/components/shell/AdminMenu";
 import { CommandPalette, PaletteButton } from "@/components/shell/CommandPalette";
@@ -44,6 +45,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </Suspense>
       <Suspense fallback={null}>
         <AccessSync />
+      </Suspense>
+      <Suspense fallback={null}>
+        <KycPendingSync />
       </Suspense>
     </div>
   );

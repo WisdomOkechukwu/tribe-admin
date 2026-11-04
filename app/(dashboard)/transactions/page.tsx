@@ -12,7 +12,7 @@ import { Toolbar } from "@/components/ui/Toolbar";
 import { listTransactions } from "@/lib/data/repo";
 import { ASSET_CODES, CATEGORIES, TX_TYPES, typesFor } from "@/lib/domain/catalog";
 import type { TxCategory } from "@/lib/domain/types";
-import { fmtCompact, fmtInt, fmtNgnCompact } from "@/lib/format";
+import { fmtInt } from "@/lib/format";
 import { flat, isoDay, oneOf, pageOf, str, type SP } from "@/lib/params";
 
 export const metadata: Metadata = { title: "Transactions" };
@@ -24,7 +24,7 @@ const STATUSES = ["completed", "pending", "failed", "reversed", "cancelled"] as 
 export default function TransactionsPage({ searchParams }: PageProps<"/transactions">) {
   return (
     <>
-      <PageHeader title="Transactions" subtitle="Every money movement, split by product. Open one to see its legs and inventory impact." actions={<MarkupsButton />} />
+      <PageHeader title="Transactions" subtitle="Every money movement, split by product. Open one to see its journal legs and conversion route." actions={<MarkupsButton />} />
       <div className="space-y-4">
         <Suspense fallback={<div className="space-y-4"><Skeleton className="h-11 w-full max-w-3xl rounded-full" /><Skeleton className="h-8 w-full max-w-4xl rounded-full" /></div>}>
           <Tabs searchParams={searchParams} />
@@ -65,7 +65,7 @@ async function Tabs({ searchParams }: Pick<PageProps<"/transactions">, "searchPa
         ]}
       />
       <Toolbar>
-        <ParamSearch placeholder={f.category === "cashpoint" ? "Reference or 12-digit cashpoint code" : f.category === "utility" ? "Reference, meter, phone or token" : "Reference, code, meter or card last 4"} className="w-full sm:w-80" />
+        <ParamSearch placeholder="Reference, title or ID" className="w-full sm:w-80" />
         <ParamPicker key={`type-${f.category ?? "all"}`} param="type" label="Type" options={types.map((t) => ({ value: t.type, label: t.label }))} />
         <ParamPicker param="status" label="Status" options={STATUSES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))} />
         <ParamPicker param="asset" label="Asset" options={ASSET_CODES.map((a) => ({ value: a, label: a }))} />
@@ -85,15 +85,9 @@ async function Results({ searchParams }: Pick<PageProps<"/transactions">, "searc
     <div className="card overflow-hidden">
       <div className="flex min-h-12 flex-wrap items-center gap-x-6 gap-y-1 border-b-2 border-line bg-sunken px-5 py-3 text-[12.5px] text-muted">
         <span><b className="num text-fg">{fmtInt(res.total)}</b> transactions</span>
-        <span>Completed volume <b className="num text-fg">${fmtCompact(res.volumeUsd)}</b></span>
-        <span>Markup revenue <b className="num text-fg">{fmtNgnCompact(res.revenueNgn)}</b></span>
-        {!f.category && (
-          <span className="hidden lg:inline">
-            {CATEGORIES.map((c) => `${c.short} ${fmtInt(res.counts[c.id] ?? 0)}`).join(" · ")}
-          </span>
-        )}
+        <span className="hidden sm:inline">Open one for its journal legs and conversion route</span>
       </div>
-      {res.rows.length ? <TxTable rows={res.rows} category={f.category} /> : <Empty title="No transactions match" hint="Try another category, or clear the filters." />}
+      {res.rows.length ? <TxTable rows={res.rows} /> : <Empty title="No transactions match" hint="Try another category, or clear the filters." />}
       <Pagination path="/transactions" params={flat(sp, KEYS)} {...res} />
     </div>
   );

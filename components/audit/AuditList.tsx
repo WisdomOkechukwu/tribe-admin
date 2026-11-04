@@ -5,14 +5,19 @@ import { isPermission, permMeta } from "@/lib/domain/permissions";
 import type { AuditEvent } from "@/lib/domain/types";
 import { fmtDateTime } from "@/lib/format";
 
-const TONE: Record<string, Tone> = { inventory: "purple", markup: "orange", kyc: "blue", customer: "warning", support: "success", team: "error", login: "neutral", logout: "neutral" };
+const TONE: Record<string, Tone> = { inventory: "purple", fees: "orange", rates: "orange", kyc: "blue", customer: "warning", support: "success", team: "error", providers: "blue", card_designs: "purple", jobs: "neutral", auth: "neutral" };
 const GRID = "grid-cols-[150px_150px_130px_minmax(0,1fr)_28px] lg:grid-cols-[160px_170px_150px_190px_minmax(0,1fr)_28px]";
 
 function targetHref(action: string, target: string) {
-  if (target.startsWith("cus_")) return action.startsWith("kyc") ? `/customers/${target}/verifications` : `/customers/${target}`;
-  if (action.startsWith("inventory")) return `/inventory?pool=${encodeURIComponent(target)}#ledger`;
-  if (action.startsWith("team")) return "/team";
-  if (action.startsWith("support")) return `/support?t=${encodeURIComponent(target)}`;
+  const area = action.split(".")[0];
+  if (area === "customer") return `/customers/${encodeURIComponent(target)}`;
+  if (area === "inventory") return "/inventory";
+  if (area === "fees" || area === "rates") return "/rates";
+  if (area === "team") return "/team";
+  if (area === "support") return `/support?t=${encodeURIComponent(target)}`;
+  if (area === "providers") return "/providers";
+  if (area === "card_designs") return "/card-designs";
+  if (area === "jobs") return "/jobs";
   return null;
 }
 

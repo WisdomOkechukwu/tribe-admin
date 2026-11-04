@@ -43,7 +43,8 @@ export function NavProgress() {
   const onLinkClick = useEffectEvent((e: MouseEvent) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = (e.target as Element | null)?.closest?.("a");
-    if (!a || !a.href || a.target === "_blank" || a.hasAttribute("download")) return;
+    // data-section-link: the click updates one page section in place (no navigation)
+    if (!a || !a.href || a.target === "_blank" || a.hasAttribute("download") || a.hasAttribute("data-section-link")) return;
     const url = new URL(a.href, location.href);
     if (url.origin !== location.origin || url.pathname.startsWith("/api") || url.pathname.startsWith("/kyc-media")) return;
     if (url.pathname === location.pathname && url.search === location.search) return;

@@ -22,6 +22,8 @@ export const PERMISSION_GROUPS = [
       { key: "customers.pii", label: "Unmasked personal data", hint: "Full email, phone, address and date of birth (masked otherwise)", risk: "sensitive" },
       { key: "customers.labels", label: "Edit labels", hint: "Add or remove internal labels like VIP or watchlist", risk: "action" },
       { key: "customers.freeze", label: "Freeze & unfreeze accounts", hint: "Stop a customer from moving money", risk: "action" },
+      { key: "adjustments.request", label: "Request manual credits & debits", hint: "Ask to credit a customer from the vault's free funds, or debit their wallet (a super admin must approve)", risk: "action" },
+      { key: "adjustments.approve", label: "Approve manual credits & debits", hint: "Super admins only: approve or reject someone else's credit/debit, posts it to the ledger", risk: "sensitive" },
     ],
   },
   {
@@ -43,15 +45,42 @@ export const PERMISSION_GROUPS = [
   {
     id: "inventory", label: "Inventory", icon: "inventory", route: "/inventory",
     items: [
-      { key: "inventory.view", label: "See inventory & ledger", hint: "Provider pools, balances and every movement", risk: "view" },
-      { key: "inventory.topup", label: "Record top-ups", hint: "Add liquidity to a provider pool", risk: "action" },
+      { key: "inventory.view", label: "See inventory & ledger", hint: "Company vaults, treasury fundings and every vault movement", risk: "view" },
+      { key: "inventory.topup", label: "Record treasury funding", hint: "Request money into a company vault (needs a second admin to approve)", risk: "action" },
+      { key: "inventory.approve", label: "Approve treasury funding", hint: "Approve or reject someone else's funding request: posts it to the ledger", risk: "action" },
     ],
   },
   {
-    id: "markups", label: "Markups", icon: "markup",
+    id: "markups", label: "Fees & margins", icon: "markup",
     items: [
-      { key: "markups.view", label: "See markups", hint: "Rate %, fee % and flat fee per transaction type", risk: "view" },
-      { key: "markups.edit", label: "Change markups", hint: "Edit and activate/deactivate pricing: affects revenue", risk: "action" },
+      { key: "markups.view", label: "See fees & margins", hint: "Buy/sell rate margin per asset, fee per transaction type", risk: "view" },
+      { key: "markups.edit", label: "Change fees & margins", hint: "Edit pricing and switch fees on or off: affects revenue", risk: "action" },
+    ],
+  },
+  {
+    id: "rates", label: "Live rates", icon: "rates",
+    items: [{ key: "rates.view", label: "See live rates", hint: "Latest provider rates and history", risk: "view" }],
+  },
+  {
+    id: "ledger", label: "Ledger", icon: "ledger", route: "/ledger",
+    items: [{ key: "ledger.view", label: "See the ledger & snapshots", hint: "Accounts, journal entries, daily snapshots and the ledger check", risk: "view" }],
+  },
+  {
+    id: "providers", label: "Providers", icon: "providers", route: "/providers",
+    items: [
+      { key: "providers.view", label: "See providers", hint: "Which partner handles which assets", risk: "view" },
+      { key: "providers.manage", label: "Change providers & NGN rail", hint: "Turn providers on or off and route conversions through naira", risk: "action" },
+    ],
+  },
+  {
+    id: "card_designs", label: "Card designs", icon: "card", route: "/card-designs",
+    items: [{ key: "card_designs.manage", label: "Manage card designs", hint: "Themes, colours and patterns offered for virtual cards", risk: "action" }],
+  },
+  {
+    id: "jobs", label: "Jobs", icon: "jobs", route: "/jobs",
+    items: [
+      { key: "jobs.view", label: "See queues & cron runs", hint: "Scheduled jobs, queue sizes and failed jobs", risk: "view" },
+      { key: "jobs.manage", label: "Retry jobs & run cron", hint: "Requeue failed jobs and run the daily snapshot by hand", risk: "action" },
     ],
   },
   {
@@ -111,11 +140,12 @@ export function normalisePerms(list: readonly string[]): Permission[] {
 
 export type RoleId = "super_admin" | "ops" | "support" | "compliance" | "finance" | "viewer" | "custom";
 
+// Presets mirror the roles seeded by the Go backend, so seeded admins show a role name.
 export const ROLE_PRESETS: { id: Exclude<RoleId, "custom">; label: string; blurb: string; color: string; perms: Permission[] }[] = [
   { id: "super_admin", label: "Super admin", blurb: "Everything, including pricing and the team.", color: "var(--color-purple-500)", perms: ALL_PERMISSIONS },
   {
     id: "ops", label: "Operations", blurb: "Runs the money: inventory, accounts, KYC, support.", color: "var(--color-orange-500)",
-    perms: normalisePerms(["overview.view", "customers.view", "customers.pii", "customers.labels", "customers.freeze", "kyc.view", "kyc.media", "kyc.decide", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "markups.view", "support.view", "support.reply", "support.resolve", "support.simulate", "api.view", "api.bodies", "audit.view", "team.view"]),
+    perms: normalisePerms(["overview.view", "customers.view", "customers.pii", "customers.labels", "customers.freeze", "adjustments.request", "kyc.view", "kyc.media", "kyc.decide", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "markups.view", "support.view", "support.reply", "support.resolve", "support.simulate", "api.view", "api.bodies", "audit.view", "team.view", "ledger.view", "providers.view", "rates.view", "jobs.view"]),
   },
   {
     id: "support", label: "Support", blurb: "Talks to customers, sees what they did, no money moves.", color: "var(--color-blue-500)",
@@ -126,14 +156,21 @@ export const ROLE_PRESETS: { id: Exclude<RoleId, "custom">; label: string; blurb
     perms: normalisePerms(["overview.view", "customers.view", "customers.pii", "customers.labels", "customers.freeze", "kyc.view", "kyc.media", "kyc.decide", "transactions.view", "api.view", "api.bodies", "audit.view", "team.view"]),
   },
   {
-    id: "finance", label: "Finance", blurb: "Revenue, liquidity and pricing visibility.", color: "var(--color-warning-500)",
-    perms: normalisePerms(["overview.view", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "markups.view", "audit.view"]),
+    id: "finance", label: "Finance", blurb: "Revenue, liquidity, the ledger and pricing.", color: "var(--color-warning-500)",
+    perms: normalisePerms(["overview.view", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "adjustments.request", "markups.view", "markups.edit", "audit.view", "ledger.view", "providers.view", "rates.view", "jobs.view"]),
   },
   {
     id: "viewer", label: "Read-only", blurb: "Look, don't touch. No personal data.", color: "var(--color-ink-300)",
     perms: normalisePerms(["overview.view", "customers.view", "transactions.view", "currencies.view", "inventory.view", "markups.view", "support.view"]),
   },
 ];
+
+/**
+ * A super admin holds every permission. The API has no role column either: it
+ * applies the same rule (adminauth.IsSuperAdmin), and only super admins may
+ * approve manual credits & debits.
+ */
+export const isSuperAdmin = (perms: readonly string[]) => ALL_PERMISSIONS.every((p) => perms.includes(p));
 
 export const roleLabel = (r: RoleId) => (r === "custom" ? "Custom" : ROLE_PRESETS.find((x) => x.id === r)?.label ?? r);
 
@@ -145,3 +182,7 @@ export function detectRole(perms: readonly Permission[]): RoleId {
 
 export const AVATAR_COLORS = ["purple", "orange", "blue", "success", "warning", "ink"] as const;
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
+export const asAvatarColor = (c: string): AvatarColor => ((AVATAR_COLORS as readonly string[]).includes(c) ? (c as AvatarColor) : "purple");
+
+/** Who is signed in (identity only; permissions are read fresh per request). */
+export type AdminProfile = { id: string; name: string; email: string; role: RoleId };

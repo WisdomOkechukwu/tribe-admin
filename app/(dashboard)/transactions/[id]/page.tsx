@@ -3,17 +3,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Icon } from "@/components/shell/icons";
-import { ApiList } from "@/components/transactions/ApiList";
-import { BalanceImpact, LegTimeline } from "@/components/transactions/LegTimeline";
+import { JournalEntries, SwapRoute } from "@/components/transactions/LegTimeline";
 import { Route, routeOf } from "@/components/transactions/Route";
-import { TxTable, txDetail } from "@/components/transactions/TxTable";
+import { txDetail } from "@/components/transactions/TxTable";
 import { Badge, KycBadge, StatusPill } from "@/components/ui/Badge";
 import { AssetIcon, Money } from "@/components/ui/Money";
-import { Empty, Facts, Panel } from "@/components/ui/Panel";
+import { Facts, Panel } from "@/components/ui/Panel";
 import { BrandLoader, PanelSkeleton, Skeleton } from "@/components/ui/Skeleton";
-import { getTransaction } from "@/lib/data/repo";
-import { ASSETS, categoryLabel, giftName, typeLabel } from "@/lib/domain/catalog";
-import { fmtDateTime, fmtInt, fmtMoney, fmtUsd } from "@/lib/format";
+import { getAccess } from "@/lib/auth/current";
+import { getTransaction, listProviders } from "@/lib/data/repo";
+import { assetInfo, categoryLabel, typeLabel } from "@/lib/domain/catalog";
+import type { SwapLeg } from "@/lib/domain/types";
+import { fmtDateTime, fmtMoney, fmtUsd } from "@/lib/format";
 
 export default function TransactionPage({ params }: PageProps<"/transactions/[id]">) {
   return (
@@ -25,12 +26,13 @@ export default function TransactionPage({ params }: PageProps<"/transactions/[id
 
 async function Detail({ params }: Pick<PageProps<"/transactions/[id]">, "params">) {
   const { id } = await params;
-  const data = await getTransaction(decodeURIComponent(id));
+  const [data, access] = await Promise.all([getTransaction(decodeURIComponent(id)), getAccess()]);
   if (!data) notFound();
-  const { tx, customer, api, pools, related, people, customerImpact, systemImpact } = data;
-  const convLegs = tx.legs.filter((l) => l.rateMarkupPct).length;
-  const detail = txDetail({ ...tx, legCount: tx.legs.length, customerName: "", customerTag: "" });
+  const { tx, customer, journal, swapLegs } = data;
+  const detail = txDetail(tx);
   const paid = tx.source;
+  const legCount = journal.reduce((n, j) => n + j.legs.length, 0);
+  const meta = Object.entries(tx.meta).filter(([, v]) => v !== null && v !== "" && typeof v !== "object");
 
   return (
     <div className="space-y-6">
@@ -49,7 +51,7 @@ async function Detail({ params }: Pick<PageProps<"/transactions/[id]">, "params"
               <span className="font-mono text-[12px] text-muted">{tx.reference} · {tx.id}</span>
             </div>
             <h1 className="display mt-3 text-[36px] font-extrabold uppercase sm:text-[46px]">{tx.title}</h1>
-            <div className="mt-3"><Route assets={routeOf(tx)} /></div>
+            <div className="mt-3"><Route assets={routeOf(tx, swapLegs)} /></div>
             {detail && <p className="mt-3 text-[13px] text-muted">{detail}</p>}
             {tx.failureReason && <p className="mt-3 rounded-chip bg-error-50 px-3 py-2 text-[12.5px] font-medium text-error-600 dark:bg-error-600/20 dark:text-error-50">{tx.failureReason}</p>}
           </div>
@@ -60,8 +62,8 @@ async function Detail({ params }: Pick<PageProps<"/transactions/[id]">, "params"
               <div className="mt-2 flex items-center gap-2.5">
                 <AssetIcon asset={paid.asset} size={38} />
                 <div>
-                  <div className="display text-[24px] leading-none font-extrabold uppercase">{ASSETS[paid.asset].name}</div>
-                  <div className="mt-0.5 text-[12px] opacity-80">{paid.asset} · {ASSETS[paid.asset].symbol} · {ASSETS[paid.asset].kind}</div>
+                  <div className="display text-[24px] leading-none font-extrabold uppercase">{assetInfo(paid.asset).name}</div>
+                  <div className="mt-0.5 text-[12px] opacity-80">{paid.asset} · {assetInfo(paid.asset).symbol} · {assetInfo(paid.asset).kind}</div>
                 </div>
               </div>
               <div className="display num mt-4 text-[36px] leading-none font-extrabold">{fmtMoney(paid.asset, paid.amount)}</div>
@@ -73,14 +75,20 @@ async function Detail({ params }: Pick<PageProps<"/transactions/[id]">, "params"
       </header>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <Panel title={`Legs · ${tx.legs.length}`} action={<span className="hidden text-[12px] text-muted sm:inline">Each conversion passes through an NGN book · customer &amp; book balance per leg</span>}>
-          <LegTimeline legs={tx.legs} pools={pools} people={people} />
-        </Panel>
-
-        <div className="space-y-6">
-          <Panel title="Balances">
-            <BalanceImpact customer={customerImpact} system={systemImpact} people={people} />
+        <div className="min-w-0 space-y-6">
+          <Panel title={`Journal · ${legCount} legs`} action={<span className="hidden text-[12px] text-muted sm:inline">Double-entry: every entry&apos;s debits equal its credits</span>}>
+            <JournalEntries journal={journal} />
           </Panel>
+          {swapLegs.length > 0 && (
+            <Panel title={`Conversion route · ${swapLegs.length} ${swapLegs.length === 1 ? "hop" : "hops"}`} action={<span className="hidden text-[12px] text-muted sm:inline">Rates applied per hop, from swap_legs</span>}>
+              {access.has("providers.view") ? (
+                <Suspense fallback={<SwapRoute legs={swapLegs} />}><SwapRouteWithProviders legs={swapLegs} /></Suspense>
+              ) : <SwapRoute legs={swapLegs} />}
+            </Panel>
+          )}
+        </div>
+
+        <div className="min-w-0 space-y-6">
           <Panel title="Customer">
             {customer ? (
               <Link href={`/customers/${customer.id}`} className="pop group flex items-center gap-3 rounded-chip bg-surface p-3">
@@ -99,28 +107,32 @@ async function Detail({ params }: Pick<PageProps<"/transactions/[id]">, "params"
               items={[
                 [tx.direction === "in" ? "Received in" : "Paid with", <Money key="s" asset={tx.source.asset} amount={tx.source.amount} icon />],
                 ["Delivered", tx.destination ? <Money key="d" asset={tx.destination.asset} amount={tx.destination.amount} icon /> : "—"],
-                ["Fees charged (all legs)", tx.fee.amount ? <Money key="f" asset={tx.fee.asset} amount={tx.fee.amount} icon /> : "None"],
-                ["Conversion legs", `${convLegs} × (${convLegs ? "1% markup + 0.1% fee" : "none"})`],
-                ["Markup & fees kept (₦)", <b key="r" className="num">₦{fmtInt(tx.markupRevenueNgn)}</b>],
-                ...(tx.meta.giftBrand ? [["Gift card", `${giftName(tx.meta.giftBrand)} · $${tx.meta.giftFaceUsd}`] as [string, string]] : []),
-                ...(tx.meta.token ? [["Electricity token", <span key="t" className="font-mono">{tx.meta.token.replace(/(\d{4})(?=\d)/g, "$1 ")}</span>] as [string, React.ReactNode]] : []),
+                ["Fee charged", tx.fee && /[1-9]/.test(tx.fee.amount) ? <Money key="f" asset={tx.fee.asset} amount={tx.fee.amount} icon /> : "None"],
+                ["Value", `≈ ${fmtUsd(tx.usdValue)}`],
+                ["Created", fmtDateTime(tx.createdAt)],
+                ["Completed", tx.completedAt ? fmtDateTime(tx.completedAt) : "—"],
+                ...(tx.quoteId ? [["Quote", <span key="q" className="font-mono text-[12px]">{tx.quoteId}</span>] as [string, React.ReactNode]] : []),
               ]}
             />
           </Panel>
+          {meta.length > 0 && (
+            <Panel title="Details">
+              <Facts cols={1} items={meta.map(([k, v]) => [k.replace(/_/g, " "), <span key={k} className="font-mono text-[12.5px] break-all">{String(v)}</span>])} />
+            </Panel>
+          )}
+          {access.has("api.view") && (
+            <Link href={`/api-trail?customer=${encodeURIComponent(tx.customerId)}`} className="link inline-flex items-center gap-1.5 text-[12.5px]">This customer&apos;s API requests <Icon name="arrow" size={13} /></Link>
+          )}
         </div>
       </div>
-
-      {related.length > 0 && (
-        <Panel title="Same cashpoint code" bodyClass="p-0">
-          <TxTable rows={related} category="cashpoint" />
-        </Panel>
-      )}
-
-      <Panel title={`API requests · ${api.length}`} bodyClass="p-0">
-        {api.length ? <ApiList rows={api} showCustomer={false} /> : <Empty title="No API requests linked" />}
-      </Panel>
     </div>
   );
+}
+
+/** Provider names stream in after the route itself (one /providers read). */
+async function SwapRouteWithProviders({ legs }: { legs: SwapLeg[] }) {
+  const providers = await listProviders().catch(() => []);
+  return <SwapRoute legs={legs} providers={Object.fromEntries(providers.map((p) => [p.id, p.name]))} />;
 }
 
 function DetailSkeleton() {

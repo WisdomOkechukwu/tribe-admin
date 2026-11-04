@@ -5,45 +5,18 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Icon } from "@/components/shell/icons";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
-import { Toggle } from "@/components/ui/Toggle";
-import { markSupportRead, replySupport, setSupportStatus, simulateSupport } from "@/lib/actions/admin";
-import { unlockAudio } from "@/lib/sound";
+import { replySupport, setSupportStatus } from "@/lib/actions/admin";
 import { useSupport } from "@/stores/support-store";
 import { toast } from "@/stores/toast-store";
 
-/** Demo controls: fire a new ticket or a customer chat reply, once or on a timer. */
-export function SimulatePanel() {
-  const [pending, start] = useTransition();
-  const [auto, setAuto] = useState(false);
-  const connected = useSupport((s) => s.connected);
-
-  const fire = (kind: "ticket" | "reply") => {
-    unlockAudio(); // the click is the user gesture browsers need for sound
-    start(async () => {
-      const r = await simulateSupport(kind);
-      if (!r.ok) toast.error(r.message);
-    });
-  };
-
-  useEffect(() => {
-    if (!auto) return;
-    const t = setInterval(() => fire(Math.random() < 0.45 ? "ticket" : "reply"), 15_000);
-    return () => clearInterval(t);
-  }, [auto]);
-
+/** Shows whether the live support stream (SSE via the API) is connected. */
+export function LiveBadge() {
+  const connected = useSupport((st) => st.connected);
   return (
-    <div className="card flex flex-wrap items-center gap-3 bg-warning-300 p-3 text-ink-900 [--edge:var(--color-ink-900)]">
-      <span className="inline-flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-wider">
-        <span className={cx("size-2.5 rounded-full", connected ? "animate-pulse bg-success-500" : "bg-error-500")} aria-hidden />
-        {connected ? "Live" : "Connecting…"} · Simulate
-      </span>
-      <Button size="sm" variant="ink" onClick={() => fire("ticket")} disabled={pending}><Icon name="ticket" size={14} /> New ticket</Button>
-      <Button size="sm" variant="secondary" onClick={() => fire("reply")} disabled={pending}><Icon name="support" size={14} /> Customer replies</Button>
-      <label className="inline-flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold">
-        <Toggle on={auto} onChange={(on) => { unlockAudio(); setAuto(on); }} label="Auto-simulate every 15 seconds" />
-        Auto every 15s
-      </label>
-    </div>
+    <span className="inline-flex items-center gap-2 rounded-full border-2 border-edge bg-surface px-3 py-1 text-[12px] font-extrabold uppercase tracking-wider">
+      <span className={cx("size-2.5 rounded-full", connected ? "animate-pulse bg-success-500" : "bg-warning-500")} aria-hidden />
+      {connected ? "Live" : "Connecting…"}
+    </span>
   );
 }
 
@@ -112,14 +85,6 @@ export function StatusButtons({ threadId, status }: { threadId: string; status: 
       <Button size="sm" variant="primary" onClick={() => set("resolved")} disabled={pending}>Resolve ✓</Button>
     </div>
   );
-}
-
-/** Clears the unread count once the admin actually opens the conversation. */
-export function MarkRead({ threadId, unread }: { threadId: string; unread: number }) {
-  useEffect(() => {
-    if (unread > 0) void markSupportRead(threadId);
-  }, [threadId, unread]);
-  return null;
 }
 
 /** Keeps the newest message in view (scrolls the message pane, never the page). */

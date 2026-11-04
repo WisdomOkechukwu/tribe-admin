@@ -9,12 +9,12 @@ Next 16 (App Router, Cache Components, Partial Prefetching) · React 19 · Tailw
 ```sh
 export PATH=~/.nvm/versions/node/v24.21.0/bin:$PATH   # Homebrew Node is broken on this machine
 npm install
-cp .env.example .env.local                            # optional in dev
+cp .env.example .env.local                            # TRIBE_API_URL=http://localhost:8081
 npm run dev                                           # http://localhost:3000
 npm run lint && npx tsc --noEmit && npm run build
 ```
 
-In `npm run dev`, **any password** signs in to an existing, active account. Production builds need the real password: `ADMIN_SEED_PASSWORD` or `ADMIN_PASSWORD_<ROLE>`, else `Tribe@Admin2026` with `TRIBE_ADMIN_ALLOW_DEV_SECRET=1`:
+Sign-in goes through the Go admin API (`POST /admin-api/sessions` on `TRIBE_API_URL`). There are no local passwords. Seeded admins (local backend only) use `Tribe@2026`:
 
 | Email | Role |
 |---|---|
@@ -23,11 +23,9 @@ In `npm run dev`, **any password** signs in to an existing, active account. Prod
 | support@tribe.africa | Support |
 | compliance@tribe.africa | Compliance |
 | finance@tribe.africa | Finance |
-| viewer@tribe.africa | Read-only (seeded **suspended**) |
+| viewer@tribe.africa | Read-only |
 
-Teammates added on `/team` get a one-time generated password (salted scrypt).
-
-Production refuses the dev secret and passwords. Set `ADMIN_SESSION_SECRET` (32+ chars) and real passwords.
+Set `ADMIN_SESSION_SECRET` (32+ chars) in production; it encrypts the session cookie that holds the API token.
 
 ## Pages
 | Route | What it does |
@@ -74,22 +72,11 @@ Permissions are read fresh on each request, so edits and suspensions apply on th
 The **Markups** button (top bar and Transactions) opens a modal. Each transaction type has a rate markup %, a fee markup %, a flat fee, and an active toggle.
 
 ## Architecture
-- **`lib/data/repo.ts` is the backend seam.** Pages only import from here. Every export authorises first, then calls a `'use cache'` function tagged per entity. `lib/data/writes.ts` is the write side. To go live, replace those two files with API calls and keep the return shapes.
-- **Mock data:** `lib/data/seed.ts` deterministically generates ~420 customers, ~6.4k transactions with legs, ~18k API requests, inventory pools and a ledger, using a seeded PRNG and a fixed `SEED_NOW`. It lives in memory (`lib/data/db.ts`). Writes last until the server restarts.
-- **Auth:**
-  - `proxy.ts` does an optimistic check of the HMAC-signed cookie.
-  - `getAdmin()` (`'use cache: private'`) guards rendering.
-  - `authorize(permission)` re-verifies the session and role inside every server action. Permissions are in `lib/domain/admins.ts`.
-  - Logins are throttled to 5 attempts per 15 minutes per email.
-- **Server actions** (`lib/actions/*`): authorise → zod-validate → write → audit → `updateTag()`, so the admin sees their own change immediately.
-- **Performance:**
-  - All data renders in Server Components behind `<Suspense>` skeletons, so every route is partially prerendered.
-  - Filtering and pagination happen on the server (50 rows a page).
-  - Charts are server-rendered SVG, and there are no chart or date libraries.
-  - Long rows use `content-visibility`.
-- **Zustand** (`stores/`) holds client UI state only:
-  - `ui-store`: theme and sidebar, persisted. It's read before paint by the inline script in `app/layout.tsx`.
-  - `markup-store`: the modal draft. Rows subscribe per transaction type.
-  - `toast-store`
-  - `palette-store`: the ⌘K palette and recent customers.
-- **Design:** the landing site's brand tokens (`app/globals.css`), denser radii, Poppins and Bricolage, a custom listbox instead of `<select>`, and light and dark themes.
+- **Backend:** every read and write goes to the Go admin API (`TRIBE_API_URL`, `/admin-api`) through `lib/api/client.ts` (server-only). The API token lives in the AES-GCM encrypted httpOnly session cookie; 401 or a suspended account signs the admin out; every write sends an `Idempotency-Key`.
+- **`lib/data/repo.ts`** maps Go resources onto `lib/domain/types.ts` (money as decimal strings). **`lib/data/writes.ts`** is the write side. Server actions (`lib/actions/*`): authorise → zod-validate → API write (the API audits it) → `refresh()`.
+- **Permissions** come from `GET /admin-api/me` on each request; `lib/domain/permissions.ts` mirrors the backend catalog for labels, presets and padlocks.
+- **Pricing:** rate margins per asset and fees per transaction type (`/rates`, or the Fees & margins modal).
+- **Treasury:** funding is a two-person check: one admin requests, a different admin approves (posts Dr Company Vault / Cr Treasury Funding) or rejects.
+- **Live support:** `/api/support/stream` proxies the API's SSE stream (`event: support`).
+- **Not from the API yet:** KYC images (a placeholder is shown).
+- **Zustand** (`stores/`) holds client UI state only.

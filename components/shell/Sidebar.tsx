@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 import { cx } from "@/components/ui/cx";
 import { useAccessStore } from "@/stores/access-store";
+import { useKycQueue } from "@/stores/kyc-store";
 import { useSupport } from "@/stores/support-store";
 import { useUi } from "@/stores/ui-store";
 import { Icon } from "./icons";
@@ -26,6 +27,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function NavList({ pathname, onNavigate }: { pathname: string | null; onNavigate?: () => void }) {
   const unread = useSupport((s) => s.unread);
+  const kycPending = useKycQueue((s) => s.pending);
   const perms = useAccessStore((s) => s.perms);
   return (
     <ul className="space-y-1">
@@ -59,6 +61,11 @@ function NavList({ pathname, onNavigate }: { pathname: string | null; onNavigate
               {n.href === "/support" && unread > 0 && (
                 <span className="num grid min-w-6 place-items-center rounded-full border-2 border-ink-900 bg-warning-300 px-1.5 text-[11px] font-extrabold text-ink-900 in-data-[sidebar=collapsed]:lg:absolute in-data-[sidebar=collapsed]:lg:ml-6 in-data-[sidebar=collapsed]:lg:-mt-6" aria-label={`${unread} unread`}>
                   {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+              {n.href === "/verifications" && kycPending > 0 && (
+                <span className="num grid min-w-6 place-items-center rounded-full border-2 border-ink-900 bg-warning-300 px-1.5 text-[11px] font-extrabold text-ink-900 in-data-[sidebar=collapsed]:lg:absolute in-data-[sidebar=collapsed]:lg:ml-6 in-data-[sidebar=collapsed]:lg:-mt-6" aria-label={`${kycPending} awaiting review`}>
+                  {kycPending > 99 ? "99+" : kycPending}
                 </span>
               )}
             </Link>

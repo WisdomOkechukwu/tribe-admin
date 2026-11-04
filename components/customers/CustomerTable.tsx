@@ -2,9 +2,8 @@ import Link from "next/link";
 import { Icon } from "@/components/shell/icons";
 import { Badge, KycBadge, StatusPill } from "@/components/ui/Badge";
 import { Table, Td, Th, THead, Tr } from "@/components/ui/Table";
-import { DATA_NOW } from "@/lib/data/repo";
 import type { CustomerRow } from "@/lib/domain/types";
-import { fmtAgo, fmtDate, fmtInt, fmtUsd, fullName, initials } from "@/lib/format";
+import { fmtAgo, fmtDate, fullName, initials } from "@/lib/format";
 
 export function Avatar({ c, size = 32 }: { c: { firstName: string; lastName: string }; size?: number }) {
   return (
@@ -17,7 +16,7 @@ export function Avatar({ c, size = 32 }: { c: { firstName: string; lastName: str
 const RISKY = ["high-risk", "watchlist", "chargeback-risk"];
 
 /** Stacked cells (who / contact / dates) so the whole row fits without sideways scrolling on desktop. */
-export function CustomerTable({ rows }: { rows: CustomerRow[] }) {
+export function CustomerTable({ rows, now }: { rows: CustomerRow[]; now: number }) {
   return (
     <Table>
       <THead>
@@ -25,8 +24,7 @@ export function CustomerTable({ rows }: { rows: CustomerRow[] }) {
         <Th>Contact</Th>
         <Th>KYC · status</Th>
         <Th>Labels</Th>
-        <Th className="text-right">Balance</Th>
-        <Th className="text-right">Tx</Th>
+        <Th>Country</Th>
         <Th>Joined · active</Th>
         <Th className="text-right"><span className="sr-only">Open</span></Th>
       </THead>
@@ -44,7 +42,7 @@ export function CustomerTable({ rows }: { rows: CustomerRow[] }) {
             </Td>
             <Td>
               <span className="block max-w-60 truncate">{c.email}</span>
-              <span className="num mt-0.5 block text-[12px] text-muted">{c.phone}</span>
+              <span className="num mt-0.5 block text-[12px] text-muted">{c.phone || "—"}</span>
             </Td>
             <Td>
               <div className="flex flex-col items-start gap-1">
@@ -57,11 +55,10 @@ export function CustomerTable({ rows }: { rows: CustomerRow[] }) {
                 {c.labels.length ? c.labels.map((l) => <Badge key={l} tone={RISKY.includes(l) ? "orange" : "purple"}>{l}</Badge>) : <span className="text-muted">—</span>}
               </div>
             </Td>
-            <Td className="num text-right font-semibold">{fmtUsd(c.totalUsd)}</Td>
-            <Td className="num text-right">{fmtInt(c.txCount)}</Td>
+            <Td className="text-muted">{c.country || "—"}</Td>
             <Td>
               <span className="block">{fmtDate(c.createdAt)}</span>
-              <span className="mt-0.5 block text-[12px] text-muted">active {fmtAgo(c.lastActiveAt, DATA_NOW)}</span>
+              <span className="mt-0.5 block text-[12px] text-muted">{c.lastActiveAt ? `active ${fmtAgo(c.lastActiveAt, now)}` : "never active"}</span>
             </Td>
             <Td className="text-right">
               <Link href={`/customers/${c.id}`} className="pop inline-flex h-8 items-center gap-1 rounded-full bg-surface px-3 text-[12px] font-bold" aria-label={`Open ${fullName(c)}`}>

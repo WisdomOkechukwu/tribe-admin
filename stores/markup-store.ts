@@ -1,70 +1,90 @@
 "use client";
 
 import { create } from "zustand";
-import type { MarkupRule, TxType } from "@/lib/domain/types";
+import type { RateMargin, TransactionFee } from "@/lib/domain/types";
 
-// Draft state for the markup modal. Rows subscribe to their own txType via
-// selectors, so typing in one row re-renders only that row.
-export type Draft = Pick<MarkupRule, "txType" | "ratePct" | "feePct" | "flatFee" | "active">;
-type Field = "ratePct" | "feePct" | "flatFee";
+// Draft state for the pricing editor (modal and /rates page): rate margins per
+// asset and fees per transaction type. Values stay as the strings the admin
+// typed (and the API's decimal strings), so nothing is rounded through floats.
+// Rows subscribe to their own key via selectors, so typing in one row
+// re-renders only that row.
 
-type MarkupState = {
+export type MarginDraft = { asset: string; buyPct: string; sellPct: string; version: number };
+export type FeeDraft = { type: string; feePct: string; flatFee: string; maxFee: string; active: boolean; flatFeeAsset: string; version: number };
+export type MarginField = "buyPct" | "sellPct";
+export type FeeField = "feePct" | "flatFee" | "maxFee";
+
+type PricingState = {
   open: boolean;
-  initial: Record<string, Draft>;
-  draft: Record<string, Draft>;
-  /** Raw input text, so "1." or "" can be typed without being coerced away. */
-  text: Record<string, string>;
-  show: () => void;
-  /** Load server rules into the draft (on open, and after a save re-renders the host). */
-  load: (rules: MarkupRule[]) => void;
+  tab: "margins" | "fees";
+  margins: Record<string, MarginDraft>;
+  marginsInitial: Record<string, MarginDraft>;
+  fees: Record<string, FeeDraft>;
+  feesInitial: Record<string, FeeDraft>;
+  show: (tab?: "margins" | "fees") => void;
   close: () => void;
-  setField: (t: TxType, f: Field, raw: string) => void;
-  toggle: (t: TxType, active?: boolean) => void;
-  setAll: (active: boolean) => void;
+  setTab: (tab: "margins" | "fees") => void;
+  /** Load server data into the drafts (on open, and after a save re-renders the host). */
+  load: (margins: RateMargin[], fees: TransactionFee[]) => void;
+  setMargin: (asset: string, f: MarginField, raw: string) => void;
+  setFee: (type: string, f: FeeField, raw: string) => void;
+  toggleFee: (type: string, active?: boolean) => void;
   reset: () => void;
-  commit: () => void;
 };
 
-const pick = (r: MarkupRule): Draft => ({ txType: r.txType, ratePct: r.ratePct, feePct: r.feePct, flatFee: r.flatFee, active: r.active });
-const textFor = (d: Record<string, Draft>) => {
-  const t: Record<string, string> = {};
-  for (const r of Object.values(d)) {
-    t[`${r.txType}.ratePct`] = String(r.ratePct);
-    t[`${r.txType}.feePct`] = String(r.feePct);
-    t[`${r.txType}.flatFee`] = String(r.flatFee);
-  }
-  return t;
-};
+const marginDraft = (m: RateMargin): MarginDraft => ({ asset: m.asset, buyPct: trimPct(m.buyPct), sellPct: trimPct(m.sellPct), version: m.version });
+const feeDraft = (f: TransactionFee): FeeDraft => ({ type: f.type, feePct: trimPct(f.feePct), flatFee: f.flatFee, maxFee: f.maxFee ?? "", active: f.active, flatFeeAsset: f.flatFeeAsset, version: f.version });
 
-export const useMarkups = create<MarkupState>()((set) => ({
+/** "1.000000" → "1", "0.250000" → "0.25". */
+function trimPct(v: string) {
+  return v.includes(".") ? v.replace(/0+$/, "").replace(/\.$/, "") : v;
+}
+
+export const usePricing = create<PricingState>()((set) => ({
   open: false,
-  initial: {},
-  draft: {},
-  text: {},
-  show: () => set({ open: true }),
-  load: (rules) => {
-    const initial = Object.fromEntries(rules.map((r) => [r.txType, pick(r)]));
-    set({ initial, draft: { ...initial }, text: textFor(initial) });
-  },
+  tab: "margins",
+  margins: {},
+  marginsInitial: {},
+  fees: {},
+  feesInitial: {},
+  show: (tab) => set((s) => ({ open: true, tab: tab ?? s.tab })),
   close: () => set({ open: false }),
-  setField: (t, f, raw) =>
-    set((s) => {
-      const n = Number(raw);
-      const text = { ...s.text, [`${t}.${f}`]: raw };
-      if (raw.trim() === "" || !Number.isFinite(n)) return { text };
-      return { text, draft: { ...s.draft, [t]: { ...s.draft[t], [f]: n } } };
-    }),
-  toggle: (t, active) => set((s) => ({ draft: { ...s.draft, [t]: { ...s.draft[t], active: active ?? !s.draft[t].active } } })),
-  setAll: (active) => set((s) => ({ draft: Object.fromEntries(Object.entries(s.draft).map(([k, v]) => [k, { ...v, active }])) })),
-  reset: () => set((s) => ({ draft: { ...s.initial }, text: textFor(s.initial) })),
-  commit: () => set((s) => ({ initial: { ...s.draft } })),
+  setTab: (tab) => set({ tab }),
+  load: (margins, fees) => {
+    const m = Object.fromEntries(margins.map((x) => [x.asset, marginDraft(x)]));
+    const f = Object.fromEntries(fees.map((x) => [x.type, feeDraft(x)]));
+    set({ margins: m, marginsInitial: m, fees: f, feesInitial: f });
+  },
+  setMargin: (asset, f, raw) => set((s) => ({ margins: { ...s.margins, [asset]: { ...s.margins[asset], [f]: raw.trim() } } })),
+  setFee: (type, f, raw) => set((s) => ({ fees: { ...s.fees, [type]: { ...s.fees[type], [f]: raw.trim() } } })),
+  toggleFee: (type, active) => set((s) => ({ fees: { ...s.fees, [type]: { ...s.fees[type], active: active ?? !s.fees[type].active } } })),
+  reset: () => set((s) => ({ margins: s.marginsInitial, fees: s.feesInitial })),
 }));
 
-const same = (a?: Draft, b?: Draft) => !!a && !!b && a.ratePct === b.ratePct && a.feePct === b.feePct && a.flatFee === b.flatFee && a.active === b.active;
+const num = (v: string) => (v === "" ? NaN : Number(v));
+const sameNum = (a: string, b: string) => a === b || (a !== "" && b !== "" && num(a) === num(b));
+const sameMargin = (a?: MarginDraft, b?: MarginDraft) => !!a && !!b && sameNum(a.buyPct, b.buyPct) && sameNum(a.sellPct, b.sellPct);
+const sameFee = (a?: FeeDraft, b?: FeeDraft) => !!a && !!b && sameNum(a.feePct, b.feePct) && sameNum(a.flatFee, b.flatFee) && (a.maxFee === b.maxFee || sameNum(a.maxFee, b.maxFee)) && a.active === b.active;
 
-export const useRowDirty = (t: TxType) => useMarkups((s) => !same(s.draft[t], s.initial[t]));
-export const useDirtyCount = () => useMarkups((s) => Object.keys(s.draft).filter((k) => !same(s.draft[k], s.initial[k])).length);
-export const changedDrafts = () => {
-  const s = useMarkups.getState();
-  return Object.values(s.draft).filter((d) => !same(d, s.initial[d.txType]));
-};
+export const isPct = (v: string, max: number) => /^\d+(\.\d{1,6})?$/.test(v) && Number(v) <= max;
+export const isAmount = (v: string) => /^\d+(\.\d{1,8})?$/.test(v);
+
+export const useMarginDirty = (asset: string) => usePricing((s) => !sameMargin(s.margins[asset], s.marginsInitial[asset]));
+export const useFeeDirty = (type: string) => usePricing((s) => !sameFee(s.fees[type], s.feesInitial[type]));
+export const useDirtyCount = () =>
+  usePricing((s) => Object.keys(s.margins).filter((k) => !sameMargin(s.margins[k], s.marginsInitial[k])).length + Object.keys(s.fees).filter((k) => !sameFee(s.fees[k], s.feesInitial[k])).length);
+
+/** Changed rows, ready for the save actions. */
+export function changedPricing() {
+  const s = usePricing.getState();
+  return {
+    margins: Object.values(s.margins).filter((m) => !sameMargin(m, s.marginsInitial[m.asset])),
+    fees: Object.values(s.fees)
+      .filter((f) => !sameFee(f, s.feesInitial[f.type]))
+      .map((f) => ({ type: f.type, feePct: f.feePct, flatFee: f.flatFee, flatFeeAsset: f.flatFeeAsset, maxFee: f.maxFee === "" ? null : f.maxFee, active: f.active, version: f.version })),
+  };
+}
+
+/** Any invalid value in the drafts (blocks saving). */
+export const useHasInvalid = () =>
+  usePricing((s) => Object.values(s.margins).some((m) => !isPct(m.buyPct, 25) || !isPct(m.sellPct, 25)) || Object.values(s.fees).some((f) => !isPct(f.feePct, 10) || !isAmount(f.flatFee) || (f.maxFee !== "" && !isAmount(f.maxFee))));

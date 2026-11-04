@@ -1,83 +1,27 @@
-// Domain model for the admin console. Mirrors tribe-mobile/src (data/seed.ts,
-// stores/*, services/kyc.ts) and adds what only ops needs: multi-leg ledgers,
-// provider inventory, markups, the API trail and the admin audit log.
-// Amounts are in major units, rounded to each asset's precision (lib/domain/assets.ts).
+// Domain model for the admin console, mapped from the Go admin API
+// (tribe-backend, /admin-api). lib/data/repo.ts converts Go's snake_case
+// resources into these shapes.
+//
+// Money is ALWAYS a decimal string ("12.50", "0.00500000"), converted from the
+// API's smallest units with each asset's decimal places. Never do arithmetic on
+// money with JS numbers; format it with lib/format.ts.
 
 export type AssetCode =
   | "NGN" | "USD" | "GBP" | "EUR" | "KES" | "GHS" | "CAD"
   | "BTC" | "ETH" | "USDT" | "USDC" | "SOL";
 
-export type Money = { asset: AssetCode; amount: number };
+/** Decimal string in major units. */
+export type Amount = string;
+export type Money = { asset: AssetCode; amount: Amount };
+
+export type Page<T> = { rows: T[]; total: number; page: number; pageSize: number; pages: number };
 
 // ── Customers ──────────────────────────────────────────────
 export type KycTier = 0 | 1 | 2 | 3;
 export type KycStatus = "none" | "pending" | "approved" | "failed";
 export type CustomerStatus = "active" | "frozen" | "closed";
 
-export type Device = {
-  id: string;
-  name: string;
-  os: string;
-  ip: string;
-  lastActive: string;
-  current: boolean;
-  trusted: boolean;
-};
-
-export type Beneficiary = {
-  id: string;
-  kind: "tribe" | "bank" | "wallet";
-  name: string;
-  handle: string;
-  asset: AssetCode;
-  network?: string;
-};
-
-export type VirtualCard = {
-  id: string;
-  label: string;
-  network: "visa" | "mastercard";
-  last4: string;
-  currency: "USD";
-  balance: number;
-  frozen: boolean;
-  monthlyLimit: number;
-  spentThisMonth: number;
-  createdAt: string;
-};
-
-export type RecurringBill = {
-  id: string;
-  billerId: string;
-  target: string;
-  amountNgn: number;
-  payWith: AssetCode;
-  frequency: "weekly" | "biweekly" | "monthly";
-  nextRun: string;
-  active: boolean;
-  lastPaid?: string;
-};
-
-export type VaultToken = {
-  id: string;
-  provider: "PHED";
-  meter: string;
-  amount: number;
-  kwh: number;
-  token: string;
-  bought: string;
-  loadedOn: string | null;
-};
-
-export type SupportTicket = {
-  id: string;
-  txId?: string;
-  reason: string;
-  status: "open" | "resolved";
-  createdAt: string;
-};
-
-export type Customer = {
+export type CustomerRow = {
   id: string;
   firstName: string;
   lastName: string;
@@ -85,216 +29,306 @@ export type Customer = {
   email: string;
   phone: string;
   country: string;
-  dob: string;
-  address: string;
-  createdAt: string;
-  lastActiveAt: string;
   status: CustomerStatus;
   labels: string[];
   kycTier: KycTier;
   kycStatus: KycStatus;
-  globalAccounts: "none" | "review" | "ready";
-  balances: Partial<Record<AssetCode, number>>;
-  opened: AssetCode[];
-  security: { biometrics: boolean; twoFactor: boolean; pinSet: boolean; lockFails: number };
-  devices: Device[];
-  beneficiaries: Beneficiary[];
-  cards: VirtualCard[];
-  recurring: RecurringBill[];
-  vault: VaultToken[];
-  referral: { code: string; referredBy?: string; invited: number; earning: number; earnedNgn: number };
-  tickets: SupportTicket[];
+  createdAt: string;
+  lastActiveAt: string | null;
+  version: number;
 };
 
-/** Lightweight row for lists, so tables never ship whole profiles. */
-export type CustomerRow = Pick<
-  Customer,
-  "id" | "firstName" | "lastName" | "tag" | "email" | "phone" | "country" | "createdAt" | "lastActiveAt" | "status" | "labels" | "kycTier" | "kycStatus"
-> & { totalUsd: number; txCount: number };
-
-// ── Verifications (QoreID) ─────────────────────────────────
-export type VerificationCheck = "bvn" | "dob" | "nin" | "liveness" | "id_document" | "address";
-export type VerificationStatus = "pending" | "approved" | "failed" | "cancelled";
-
-/** A KYC image (served by the auth-gated /kyc-media route). */
-export type KycMediaKind = "selfie" | "liveness_frame" | "bvn_photo" | "nin_photo" | "id_front" | "id_back" | "proof_of_address";
-export type KycMedia = { id: string; kind: KycMediaKind; label: string };
-
-export type Verification = {
+export type Device = {
   id: string;
-  customerId: string;
-  tier: 1 | 2 | 3;
-  check: VerificationCheck;
-  provider: "QoreID";
+  name: string;
+  platform: string;
+  model: string;
+  appVersion: string;
+  status: string;
+  lastSeenAt: string | null;
+  activatedAt: string | null;
+  createdAt: string;
+};
+
+export type VirtualCard = {
+  id: string;
+  label: string;
+  network: string;
+  last4: string;
+  currency: string;
+  frozen: boolean;
+  status: string;
+  designFinish: string;
+  createdAt: string;
+};
+
+export type WalletBalance = { account: string; accountNumber: string; asset: AssetCode; balance: Amount };
+
+export type Customer = CustomerRow & {
+  address: string;
+  dob: string;
+  balances: WalletBalance[];
+  devices: Device[];
+  cards: VirtualCard[];
+  txCount: number;
+  /** When this was read from the API (reference "now" for relative times). */
+  fetchedAt: number;
+};
+
+// ── Verifications (KYC) ────────────────────────────────────
+// A customer sends ONE request (submission) per tier; it holds that tier's checks
+// (e.g. NIN + selfie). Admins approve or reject the whole request. Only one request
+// per customer can be open at a time.
+export type SubmissionStatus = "pending" | "approved" | "rejected";
+
+export type VerificationCheck = {
+  id: string;
+  check: string;
+  status: string;
+  provider: string;
   reference: string;
-  status: VerificationStatus;
   documentType?: string;
   documentMasked?: string;
   matchScore?: number;
+};
+
+export type VerificationSubmission = {
+  id: string;
+  customerId: string;
+  tier: number;
+  status: SubmissionStatus;
+  /** rejection reason (the customer sees it) */
+  reason?: string;
   submittedAt: string;
   decidedAt?: string;
   decidedBy?: string;
-  reason?: string;
-  media: KycMedia[];
+  /** 1 for the first request for this tier, 2 for the first retry… */
+  attempt: number;
+  /** why the customer's previous request for this tier was rejected */
+  previousReason?: string;
+  checks: VerificationCheck[];
+  customerName: string;
+  customerTag: string;
+  customerEmail: string;
+  currentTier: number;
 };
 
 // ── Transactions ───────────────────────────────────────────
 export type TxCategory = "currency" | "virtual_card" | "cashpoint" | "utility" | "giftcard";
-
-export type TxType =
-  | "swap" | "deposit" | "withdrawal" | "send" | "receive"
-  | "card_create" | "card_fund" | "card_spend" | "card_withdraw" | "card_refund" | "card_chargeback"
-  | "cashpoint_create" | "cashpoint_redeem" | "cashpoint_cancel"
-  | "airtime" | "data" | "tv" | "electricity"
-  | "giftcard_buy" | "giftcard_sell";
-
 export type TxStatus = "completed" | "pending" | "failed" | "cancelled" | "reversed";
 
-export type LegKind =
-  | "debit_wallet" | "credit_wallet" | "convert" | "fee"
-  | "provider_payout" | "provider_purchase" | "provider_collect"
-  | "card_load" | "card_unload" | "escrow_hold" | "escrow_release";
-
-export type InventoryMovement = {
-  poolId: string;
-  delta: number;
-  before: number;
-  after: number;
-};
-
-/** A customer-side balance change (wallet or virtual card), with before/after. */
-export type BalanceMovement = {
-  customerId: string;
-  account: "wallet" | "card";
-  asset: AssetCode;
-  cardId?: string;
-  cardLast4?: string;
-  delta: number;
-  before: number;
-  after: number;
-};
-
-export type Leg = {
-  seq: number;
-  kind: LegKind;
-  label: string;
-  from?: Money;
-  to?: Money;
-  baseRate?: number;
-  appliedRate?: number;
-  rateMarkupPct?: number;
-  fee?: Money;
-  provider?: string;
-  providerRef?: string;
-  status: "completed" | "pending" | "failed" | "reversed";
-  at: string;
-  /** System side: provider pool balances. */
-  inventory: InventoryMovement[];
-  /** Customer side: wallet / card balances. */
-  balances: BalanceMovement[];
-};
-
-export type Transaction = {
+export type TxRow = {
   id: string;
   reference: string;
   customerId: string;
+  customerName?: string;
+  customerTag?: string;
   category: TxCategory;
-  type: TxType;
+  /** Backend type, e.g. swap, send, card_fund, gift_buy. */
+  type: string;
   status: TxStatus;
   direction: "in" | "out";
   title: string;
+  subtitle: string;
   source: Money;
   destination?: Money;
-  fee: Money;
-  /** Revenue kept from rate + fee markups, in NGN for comparability. */
-  markupRevenueNgn: number;
-  usdValue: number;
-  createdAt: string;
+  fee?: Money;
+  usdValue: Amount;
+  journalEntryId?: string;
+  quoteId?: string;
   failureReason?: string;
-  /** Asset → NGN book → … → destination, as shown on every transaction. */
-  route: import("./catalog").RouteStep[];
-  meta: {
-    cashpointCode?: string;
-    billerId?: string;
-    target?: string;
-    plan?: string;
-    token?: string;
-    units?: number;
-    giftBrand?: string;
-    giftFaceUsd?: number;
-    cardId?: string;
-    cardLast4?: string;
-    merchant?: string;
-    network?: string;
-    channel?: string;
-    counterparty?: string;
-    recurringId?: string;
-  };
-  legs: Leg[];
+  meta: Record<string, unknown>;
+  createdAt: string;
+  completedAt?: string;
 };
 
-/** Row shape for lists; legs stay on the server until the detail page. */
-export type TxRow = Omit<Transaction, "legs"> & { legCount: number; customerName: string; customerTag: string };
-
-// ── Inventory ──────────────────────────────────────────────
-export type InventoryPool = {
+export type JournalEntry = {
   id: string;
-  /** "book" = an NGN book (Local NGN, Crypto NGN…); "asset" = custody/FX pool. */
-  kind: "book" | "asset";
-  /** Display name: "Crypto NGN", "BTC" or "Global FX partner · GBP". */
-  label: string;
-  /** Can admins add funds to it? (all NGN books except Cashpoint NGN). */
-  topup: boolean;
-  providerId: string;
-  provider: string;
-  purpose: string;
+  reference: string;
+  transactionType: string;
+  description: string;
+  status: string;
+  reversesEntryId?: string;
+  businessTransactionId?: string;
+  createdBy: string;
+  metadata: Record<string, unknown>;
+  accountingDate: string;
+  postedAt: string;
+};
+
+export type JournalLeg = {
+  id: number;
+  journalEntryId: string;
+  ledgerAccountId: number;
   asset: AssetCode;
-  balance: number;
-  lowThreshold: number;
-  updatedAt: string;
+  side: "debit" | "credit";
+  amount: Amount;
+  usdRate: string | null;
+  ngnRate: string | null;
+  memo: string;
+  accountNumber: string;
+  accountName: string;
+  accountCategory: string;
+  createdAt: string;
 };
 
-export type InventoryEntryKind = "topup" | "deduction" | "credit" | "adjustment";
+export type JournalView = { entry: JournalEntry; legs: JournalLeg[] };
 
-export type InventoryEntry = {
+/** One hop of a conversion route (e.g. USD → NGN, NGN → GBP). */
+export type SwapLeg = {
+  step: number;
+  fromAsset: AssetCode;
+  toAsset: AssetCode;
+  from: Amount;
+  to: Amount;
+  rate: string;
+  providerId: string;
+  viaNgnRail: boolean;
+  createdAt: string;
+};
+
+export type TxDetail = { tx: TxRow; customer: CustomerRow | null; journal: JournalView[]; swapLegs: SwapLeg[] };
+
+// ── Ledger ─────────────────────────────────────────────────
+export type LedgerAccount = {
+  id: number;
+  accountNumber: string;
+  ownerKey: string;
+  code: string;
+  name: string;
+  category: string;
+  normalSide: "debit" | "credit";
+  asset: AssetCode;
+  userId?: string;
+  accountType: string;
+  allowNegative: boolean;
+  status: string;
+  balance: Amount;
+  createdAt: string;
+};
+
+export type LedgerSnapshot = {
+  id: number;
+  ledgerAccountId: number;
+  date: string;
+  accountNumber: string;
+  accountName: string;
+  asset: AssetCode;
+  closing: Amount;
+  lastJournalLegId: number;
+  createdAt: string;
+};
+
+// ── Treasury (inventory funding, two-person check) ─────────
+export type FundingStatus = "pending" | "approved" | "rejected";
+
+export type TreasuryFunding = {
   id: string;
-  poolId: string;
-  kind: InventoryEntryKind;
-  delta: number;
-  before: number;
-  after: number;
-  txId?: string;
-  externalRef?: string;
-  note?: string;
-  adminId?: string;
-  at: string;
-  /** Top-ups: NGN that funded it, the NGN→asset rate, and the other side's pool. */
-  fundedNgn?: number;
-  rate?: number;
-  linkedPoolId?: string;
+  asset: AssetCode;
+  amount: Amount;
+  externalReference: string;
+  note: string;
+  status: FundingStatus;
+  requestedBy: string;
+  requestedByName: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  decidedAt?: string;
+  rejectionReason?: string;
+  journalEntryId?: string;
+  createdAt: string;
 };
 
-// ── Markups ────────────────────────────────────────────────
-export type MarkupRule = {
-  txType: TxType;
-  category: TxCategory;
-  ratePct: number;
-  feePct: number;
-  flatFee: number;
-  flatFeeAsset: AssetCode;
-  active: boolean;
-  updatedAt: string;
-  updatedBy: string;
+// ── Manual customer credits & debits (two-person, super admin approves) ─
+export type AdjustmentKind = "credit" | "debit";
+
+export type CustomerAdjustment = {
+  id: string;
+  kind: AdjustmentKind;
+  customerId: string;
+  customerName: string;
+  customerTag: string;
+  asset: AssetCode;
+  amount: Amount;
+  reason: string;
+  status: FundingStatus;
+  requestedBy: string;
+  requestedByName: string;
+  approvedByName?: string;
+  decidedAt?: string;
+  rejectionReason?: string;
+  transactionId?: string;
+  journalEntryId?: string;
+  createdAt: string;
 };
+
+/** Per currency: the vault, what customers are owed, and the difference admins may credit (can be negative). */
+export type FreeFunds = { asset: AssetCode; vault: Amount; owed: Amount; free: Amount };
+
+// ── Pricing: rate margins (per asset) + transaction fees (per type) ─
+export type RateMargin = { asset: AssetCode; buyPct: string; sellPct: string; version: number; updatedBy: string; updatedAt: string };
+
+export type TransactionFee = {
+  type: string;
+  category: TxCategory;
+  feePct: string;
+  flatFee: string;
+  flatFeeAsset: AssetCode;
+  /** Cap on the fee, in flatFeeAsset. null = no cap. */
+  maxFee: string | null;
+  active: boolean;
+  version: number;
+  updatedBy: string;
+  updatedAt: string;
+};
+
+// ── Rates ──────────────────────────────────────────────────
+export type LiveRate = { asset: AssetCode; usd: string; ngn: string; changePct: string };
+export type RatesSnapshot = { version: number; collectedAt: string; isStale: boolean; rates: LiveRate[] };
+export type RatePoint = { usd: string; ngn: string; at: string };
+
+// ── Providers & card designs ───────────────────────────────
+export type Provider = {
+  id: string;
+  slug: string;
+  name: string;
+  category: string;
+  usesNgnRail: boolean;
+  supportsDirectConversion: boolean;
+  isSimulator: boolean;
+  enabled: boolean;
+  assets: AssetCode[];
+  version: number;
+  updatedAt: string;
+};
+
+export type CardDesignKind = "theme" | "swatch" | "pattern";
+export type CardDesign = {
+  id: string;
+  kind: CardDesignKind;
+  name: string;
+  finish: string;
+  hexColor: string | null;
+  pattern: string | null;
+  enabled: boolean;
+  sortOrder: number;
+  version: number;
+  updatedAt: string;
+};
+
+// ── Jobs ───────────────────────────────────────────────────
+export type CronRun = { id: number; job: string; window: string; status: string; message: string; startedAt: string; finishedAt: string | null };
+export type QueueInfo = { name: string; pending: number; active: number; scheduled: number; retry: number; failed: number; processedToday: number };
+export type FailedJob = { id: string; queue: string; type: string; error: string; failedAt: string };
+export type Jobs = { schedule: { name: string; cron: string }[]; cronRuns: CronRun[]; queues: QueueInfo[]; failed: FailedJob[] };
 
 // ── API trail ──────────────────────────────────────────────
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
 export type ApiRequest = {
   id: string;
   requestId: string;
+  actorType: string;
   customerId?: string;
-  method: HttpMethod;
+  method: string;
   path: string;
   status: number;
   latencyMs: number;
@@ -303,7 +337,6 @@ export type ApiRequest = {
   at: string;
   txId?: string;
   request?: string;
-  response?: string;
   error?: string;
 };
 
@@ -313,37 +346,28 @@ export type ThreadStatus = "open" | "pending" | "resolved";
 export type SupportThread = {
   id: string;
   customerId: string;
+  customerName: string;
+  customerTag: string;
   channel: "ticket" | "chat";
   subject: string;
   txId?: string;
   status: ThreadStatus;
   priority: "normal" | "high" | "urgent";
+  unread: number;
+  preview: string;
   createdAt: string;
   updatedAt: string;
-  /** Monotonic activity order, so new events always float to the top. */
-  activity: number;
-  unread: number;
-  messages: SupportMessage[];
 };
 
 // ── Admins & audit ─────────────────────────────────────────
-
-export type AuditAction =
-  | "login" | "logout" | "inventory.topup" | "markup.update"
-  | "kyc.approve" | "kyc.reject" | "customer.freeze" | "customer.unfreeze" | "customer.labels"
-  | "support.reply" | "support.status"
-  | "team.add" | "team.update" | "team.suspend" | "team.reactivate" | "team.reset" | "team.remove";
-
 export type AuditEvent = {
   id: string;
   adminId: string;
   adminName: string;
-  action: AuditAction;
+  action: string;
   target: string;
   summary: string;
   before?: string;
   after?: string;
   at: string;
 };
-
-export type Page<T> = { rows: T[]; total: number; page: number; pageSize: number; pages: number };

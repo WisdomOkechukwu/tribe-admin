@@ -37,6 +37,12 @@ const P = {
   copy: "M9 9h11v11H9zM5 15H4V4h11v1",
   plus: "M12 5v14M5 12h14",
   trash: "M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14",
+  rates: "M3 17l6-6 4 4 8-8M15 7h6v6",
+  ledger: "M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4zM8 8h8M8 12h8M8 16h5",
+  providers: "M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4",
+  card: "M2 6h20v12H2zM2 10h20M6 15h4",
+  jobs: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 3",
+  refresh: "M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5",
   alert: "M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0",
 } as const;
 

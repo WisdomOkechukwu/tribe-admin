@@ -5,7 +5,7 @@ import { SESSION_COOKIE, decodeSession } from "@/lib/auth/session";
 // page's data and every server action re-checks the session itself.
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const authed = decodeSession(request.cookies.get(SESSION_COOKIE)?.value) !== null;
+  const authed = decodeSession(request.cookies.get(SESSION_COOKIE)?.value, Date.now()) !== null;
   const onLogin = pathname === "/login";
 
   if (!authed && !onLogin) {

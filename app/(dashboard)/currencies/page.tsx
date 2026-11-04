@@ -3,12 +3,15 @@ import { Gate } from "@/components/access/Gate";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Icon } from "@/components/shell/icons";
+import { Badge } from "@/components/ui/Badge";
 import { AssetIcon } from "@/components/ui/Money";
 import { PageHeader } from "@/components/ui/Panel";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { listCurrencies } from "@/lib/data/repo";
-import { ASSET_FACE, NETWORKS } from "@/lib/domain/catalog";
-import { fmtAmount, fmtCompact, fmtInt, fmtRate } from "@/lib/format";
+import { getAccess } from "@/lib/auth/current";
+import { listCurrencies, listInventory, listProviders } from "@/lib/data/repo";
+import { NETWORKS, assetFace } from "@/lib/domain/catalog";
+import type { AssetCode } from "@/lib/domain/types";
+import { fmtCompact, fmtDateTime, fmtMoney, fmtPct, fmtRate, signOf, toNum } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Currencies" };
 
@@ -18,30 +21,60 @@ export default function CurrenciesPage() {
       <PageHeader
         eyebrow="the lineup"
         title="Currencies"
-        subtitle="Every fiat and crypto Tribe holds: how it looks in the app, its rate, who holds it and how much provider liquidity backs it. Tap a card to see its transactions."
+        subtitle="Every fiat and crypto asset the backend supports: how it looks in the app, its live rate, which provider converts it and what the company vault holds. Tap a card to see its transactions."
+        actions={<Link href="/rates" className="link text-[12.5px]">Live rates & margins →</Link>}
       />
-      <Suspense fallback={<div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-72 rounded-card" />)}</div>}>
+      <Suspense fallback={<CurrenciesSkeleton />}>
         <Gate perm="currencies.view"><Grid /></Gate>
       </Suspense>
     </>
   );
 }
 
+/** Streams into each card: one /inventory call shared by every card (repo cache). */
+async function VaultBalance({ code }: { code: AssetCode }) {
+  const access = await getAccess();
+  if (!access.has("inventory.view")) return <span className="text-muted">Needs “See inventory”</span>;
+  const balance = (await listInventory().catch(() => [])).find((v) => v.code === "company_vault" && v.asset === code)?.balance;
+  return balance === undefined ? <span className="text-muted">—</span> : <>{fmtMoney(code, balance)}</>;
+}
+
+/** Streams into each card: one /providers call shared by every card (repo cache). */
+async function ProviderLine({ id }: { id: string }) {
+  const access = await getAccess();
+  const p = access.has("providers.view") ? (await listProviders().catch(() => [])).find((x) => x.id === id) : undefined;
+  return (
+    <>
+      <dd className="text-muted">{p?.name ?? "Provider hidden"}</dd>
+      {p?.isSimulator && <Badge tone="warning">Simulated</Badge>}
+    </>
+  );
+}
+
+function CurrenciesSkeleton() {
+  return <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-72 rounded-card" />)}</div>;
+}
+
 async function Grid() {
-  const all = await listCurrencies();
+  const { rows, collectedAt, isStale } = await listCurrencies();
   const groups = [
-    { title: "Fiat", rows: all.filter((a) => a.kind === "fiat") },
-    { title: "Crypto", rows: all.filter((a) => a.kind === "crypto") },
+    { title: "Fiat", rows: rows.filter((a) => a.kind === "fiat") },
+    { title: "Crypto", rows: rows.filter((a) => a.kind === "crypto") },
   ];
   return (
     <div className="space-y-8">
+      <p className="inline-flex flex-wrap items-center gap-2 rounded-full border-2 border-dashed border-line px-3 py-1 text-[12px] text-muted">
+        <span className={`size-2 rounded-full ${isStale ? "bg-warning-500" : "animate-pulse bg-success-500"}`} aria-hidden />
+        {collectedAt ? `Rates collected ${fmtDateTime(collectedAt)} Lagos${isStale ? " · stale" : ""}` : "No rates collected yet"}
+      </p>
       {groups.map((g) => (
         <section key={g.title}>
           <h2 className="display mb-3 text-[24px] font-extrabold uppercase">{g.title} <span className="text-muted">· {g.rows.length}</span></h2>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {g.rows.map((a) => {
-              const face = ASSET_FACE[a.code];
-              const coverOk = a.cover === null || a.cover >= 1;
+              const face = assetFace(a.code);
+              const ngn = toNum(a.ngn);
+              const change = a.changePct ?? "0";
               return (
                 <Link key={a.code} href={`/transactions?asset=${a.code}`} className="pop group block overflow-hidden rounded-card bg-surface">
                   {/* Wallet-card face, in the currency's brand colour. */}
@@ -51,33 +84,32 @@ async function Grid() {
                       <AssetIcon asset={a.code} size={44} />
                       <div>
                         <div className="display text-[26px] leading-none font-extrabold uppercase">{a.name}</div>
-                        <div className="mt-1 text-[12px] font-semibold opacity-85">{a.code} · {a.symbol} · {a.decimals} dp</div>
+                        <div className="mt-1 text-[12px] font-semibold opacity-85">{a.code} · {a.symbol} · {a.decimals} dp{a.enabled ? "" : " · disabled"}</div>
                       </div>
                     </div>
                     <div className="relative mt-5 text-[11px] font-bold uppercase tracking-wider opacity-80">Rate</div>
                     <div className="display num relative text-[24px] font-extrabold">
-                      {a.code === "NGN" ? `$1 = ₦${fmtRate(1 / a.usd)}` : `1 ${a.code} = ₦${a.ngnRate >= 1_000_000 ? fmtCompact(a.ngnRate) : fmtRate(a.ngnRate)}`}
+                      {a.ngn === null ? "—" : a.code === "NGN" ? `$1 = ₦${fmtRate(1 / toNum(a.usd))}` : `1 ${a.code} = ₦${ngn >= 1_000_000 ? fmtCompact(ngn) : fmtRate(ngn)}`}
                     </div>
-                    {NETWORKS[a.code] && <div className="relative mt-2 flex flex-wrap gap-1">{NETWORKS[a.code]!.map((n) => <span key={n} className="rounded-full bg-black/20 px-2 py-0.5 text-[10.5px] font-bold uppercase">{n}</span>)}</div>}
+                    {NETWORKS[a.code as AssetCode] && <div className="relative mt-2 flex flex-wrap gap-1">{NETWORKS[a.code as AssetCode]!.map((n) => <span key={n} className="rounded-full bg-black/20 px-2 py-0.5 text-[10.5px] font-bold uppercase">{n}</span>)}</div>}
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-5 text-[12.5px]">
-                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Holders</dt><dd className="num mt-0.5 text-[16px] font-extrabold">{fmtInt(a.holders)}</dd></div>
-                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">7d volume</dt><dd className="num mt-0.5 text-[16px] font-extrabold">${fmtCompact(a.vol7Usd)}</dd></div>
-                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Customers hold</dt><dd className="num mt-0.5 font-semibold">{a.symbol} {fmtCompact(a.held)}</dd></div>
-                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Provider liquidity</dt><dd className="num mt-0.5 font-semibold">{a.symbol} {fmtCompact(a.liquidity)}</dd></div>
+                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">USD price</dt><dd className="num mt-0.5 text-[16px] font-extrabold">{a.usd === null ? "—" : `$${fmtRate(a.usd)}`}</dd></div>
+                    <div>
+                      <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Today</dt>
+                      <dd className={`num mt-0.5 text-[16px] font-extrabold ${signOf(change) > 0 ? "text-success-600 dark:text-success-300" : signOf(change) < 0 ? "text-error-600 dark:text-error-50" : ""}`}>{signOf(change) > 0 ? "+" : ""}{fmtPct(change)}</dd>
+                    </div>
                     <div className="col-span-2">
-                      <dt className="flex justify-between text-[10.5px] font-bold uppercase tracking-wider text-muted">
-                        <span>Liquidity cover</span>
-                        <span className={coverOk ? "text-success-600" : "text-error-600"}>{a.cover === null ? "n/a" : `${a.cover >= 100 ? "100+" : a.cover.toFixed(1)}×`}</span>
-                      </dt>
-                      <dd className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-sunken">
-                        <div className={`h-full rounded-full ${coverOk ? "bg-success-500" : "bg-error-500"}`} style={{ width: `${a.cover === null ? 0 : Math.min(100, a.cover * 50)}%` }} />
-                      </dd>
-                      <span className="sr-only">{a.cover === null ? "No customer balances" : `Provider liquidity covers ${fmtAmount(a.code, a.cover)} times customer balances`}</span>
+                      <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Company vault</dt>
+                      <dd className="num mt-0.5 font-semibold"><Suspense fallback={<Skeleton className="mt-1 h-4 w-28" />}><VaultBalance code={a.code} /></Suspense></dd>
+                    </div>
+                    <div className="col-span-2 flex flex-wrap items-center gap-2">
+                      <dt className="sr-only">Provider</dt>
+                      <Suspense fallback={<dd><Skeleton className="h-4 w-32" /></dd>}><ProviderLine id={a.providerId} /></Suspense>
                     </div>
                   </dl>
                   <div className="flex items-center justify-between border-t-2 border-line px-5 py-3 text-[12.5px] font-bold">
-                    <span>{fmtInt(a.tx7)} transactions this week</span>
+                    <span>{a.code} transactions</span>
                     <span className="inline-flex items-center gap-1 transition-transform group-hover:translate-x-1">View <Icon name="arrow" size={14} /></span>
                   </div>
                 </Link>

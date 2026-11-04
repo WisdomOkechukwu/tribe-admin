@@ -17,7 +17,7 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
         </div>
         <div className="relative max-w-md">
           <h1 className="display text-[72px] leading-[0.9] font-extrabold uppercase">Admin<br />console</h1>
-          <p className="mt-3 text-[15px] text-purple-100">Customers, transactions and their legs, inventory, markups and the API trail, all in one place.</p>
+          <p className="mt-3 text-[15px] text-purple-100">Customers, transactions and their ledger legs, treasury, fees and margins, and the API trail, all in one place.</p>
         </div>
         <p className="relative text-[12px] text-purple-200">Authorised staff only. Every action is logged.</p>
       </aside>
@@ -41,7 +41,7 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
 async function LoginWithNext({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
   const sp = await searchParams;
   const next = typeof sp.next === "string" ? sp.next : undefined;
-  const reason = sp.reason === "suspended" ? "Your access was suspended by a team manager." : sp.reason === "removed" ? "Your account was removed from the team." : null;
+  const reason = sp.reason === "suspended" ? "Your access was suspended by a team manager." : sp.reason === "removed" ? "Your account was removed from the team." : sp.reason === "expired" ? "Your session ended. Sign in again." : null;
   return (
     <>
       {reason && <p role="status" className="mb-4 rounded-chip border-2 border-edge bg-warning-300 px-3 py-2 text-[12.5px] font-semibold text-ink-900">{reason}</p>}

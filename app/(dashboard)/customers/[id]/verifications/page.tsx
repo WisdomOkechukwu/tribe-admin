@@ -1,68 +1,84 @@
 import { Gate } from "@/components/access/Gate";
 import { Suspense } from "react";
 import { KycDecision } from "@/components/kyc/KycDecision";
-import { MediaGallery } from "@/components/kyc/MediaGallery";
-import { Icon } from "@/components/shell/icons";
+import { EvidencePlaceholder } from "@/components/kyc/EvidencePlaceholder";
 import { Badge, StatusPill } from "@/components/ui/Badge";
 import { Empty, Panel } from "@/components/ui/Panel";
 import { BrandLoader, PanelSkeleton } from "@/components/ui/Skeleton";
 import { getAccess } from "@/lib/auth/current";
 import { getCustomerVerifications } from "@/lib/data/repo";
-import { CHECK_LABEL, TIER_LIMITS } from "@/lib/domain/catalog";
+import { TIER_LIMITS, checkLabel, kycTierTitle } from "@/lib/domain/catalog";
+import type { VerificationSubmission } from "@/lib/domain/types";
 import { fmtDateTime } from "@/lib/format";
-
-const TIER_TITLE = { 1: "Tier 1 · BVN + date of birth", 2: "Tier 2 · NIN + selfie liveness", 3: "Tier 3 · ID document + address" } as const;
 
 export default function VerificationsTab({ params }: PageProps<"/customers/[id]/verifications">) {
   return (
     <Suspense fallback={<div className="space-y-6"><PanelSkeleton><BrandLoader text="Loading checks…" /></PanelSkeleton><PanelSkeleton /></div>}>
-      <Gate perm="kyc.view"><Checks params={params} /></Gate>
+      <Gate perm="kyc.view"><Requests params={params} /></Gate>
     </Suspense>
   );
 }
 
-async function Checks({ params }: Pick<PageProps<"/customers/[id]/verifications">, "params">) {
+/** A tier's badge comes from its LATEST request, so a rejected try followed by an approved one reads Passed. */
+function TierBadge({ latest }: { latest: VerificationSubmission }) {
+  if (latest.status === "approved") return <Badge tone="success">Passed</Badge>;
+  if (latest.status === "rejected") return <Badge tone="error">Rejected</Badge>;
+  return <Badge tone="warning">In review</Badge>;
+}
+
+async function Requests({ params }: Pick<PageProps<"/customers/[id]/verifications">, "params">) {
   const { id } = await params;
-  const [checks, access] = await Promise.all([getCustomerVerifications(id), getAccess()]);
+  const [requests, access] = await Promise.all([getCustomerVerifications(id), getAccess()]);
   const canDecide = access.has("kyc.decide");
   const canMedia = access.has("kyc.media");
-  const reference = checks.flatMap((c) => c.media).find((m) => m.kind === "bvn_photo") ?? checks.flatMap((c) => c.media).find((m) => m.kind === "nin_photo");
-  if (!checks.length) return <div className="card overflow-hidden"><Empty title="No verification attempts yet" hint="Tier 0: the customer hasn't started KYC." /></div>;
+  if (!requests.length) return <div className="card overflow-hidden"><Empty title="No verification requests yet" hint="Tier 0: the customer hasn't started verification." /></div>;
 
+  // requests arrive newest first; group by tier, highest tier on top
+  const tiers = [...new Set(requests.map((r) => r.tier))].sort((a, b) => b - a);
   return (
     <ol className="space-y-6">
-      {([1, 2, 3] as const).map((tier) => {
-        const rows = checks.filter((c) => c.tier === tier);
-        if (!rows.length) return null;
-        const done = rows.every((r) => r.status === "approved");
+      {tiers.map((tier) => {
+        const timeline = requests.filter((r) => r.tier === tier);
         return (
           <li key={tier}>
             <Panel
-              title={<span className="flex items-center gap-2">{TIER_TITLE[tier]} {done ? <Badge tone="success">Passed</Badge> : rows.some((r) => r.status === "failed") ? <Badge tone="error">Failed</Badge> : <Badge tone="warning">In review</Badge>}</span>}
-              action={<span className="text-[12px] text-muted">Unlocks {TIER_LIMITS[tier].daily}/day</span>}
-              bodyClass="divide-y-2 divide-line px-5 py-5"
+              title={<span className="flex items-center gap-2">{kycTierTitle(tier)} <TierBadge latest={timeline[0]} /></span>}
+              action={TIER_LIMITS[tier] ? <span className="text-[12px] text-muted">Unlocks {TIER_LIMITS[tier].daily}/day</span> : undefined}
+              bodyClass="px-5 py-5"
             >
-              {rows.map((v) => (
-                <div key={v.id} className="grid grid-cols-1 gap-x-6 gap-y-4 py-5 first:pt-0 last:pb-0 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.2fr)_220px] lg:items-center">
-                  <div>
-                    <div className="flex items-center gap-2 font-medium">{CHECK_LABEL[v.check]} <StatusPill status={v.status} /></div>
-                    <div className="mt-0.5 text-[12px] text-muted">{v.provider} · <span className="font-mono">{v.reference}</span></div>
-                  </div>
-                  <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12.5px]">
-                    {v.documentType && <><dt className="text-muted">Document</dt><dd>{v.documentType}</dd></>}
-                    {v.documentMasked && <><dt className="text-muted">Value</dt><dd className="num break-words">{v.documentMasked}</dd></>}
-                    {v.matchScore !== undefined && <><dt className="text-muted">Match score</dt><dd className={v.matchScore < 70 ? "font-semibold text-error-600" : ""}>{v.matchScore}%</dd></>}
-                    <dt className="text-muted">Submitted</dt><dd>{fmtDateTime(v.submittedAt)}</dd>
-                    {v.decidedAt && <><dt className="text-muted">Decided</dt><dd>{fmtDateTime(v.decidedAt)} · {v.decidedBy}</dd></>}
-                    {v.reason && <><dt className="text-muted">Reason</dt><dd className="text-error-600">{v.reason}</dd></>}
-                  </dl>
-                  <div>
-                    <div className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-muted">Evidence</div>
-                    {!canMedia ? <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-line px-2.5 py-1 text-[11.5px] text-muted"><Icon name="lock" size={12} /> Images hidden</span> : v.media.length ? <MediaGallery media={v.media} reference={reference} title={`Tier ${v.tier} · ${CHECK_LABEL[v.check]}`} /> : <span className="text-[12px] text-muted">No image required</span>}
-                  </div>
-                  <div className="flex lg:justify-end">{v.status === "pending" && canDecide ? <KycDecision id={v.id} /> : <span className="text-[12px] text-muted">{v.status === "pending" ? "Awaiting a reviewer" : `Decided ${v.decidedAt ? fmtDateTime(v.decidedAt) : ""}`}</span>}</div>
-                </div>
-              ))}
+              <ol className="relative space-y-5 border-l-2 border-line pl-5">
+                {timeline.map((r) => (
+                  <li key={r.id} className="relative">
+                    <span aria-hidden className={`absolute top-1.5 -left-[27px] size-3 rounded-full ring-4 ring-surface ${r.status === "approved" ? "bg-success-500" : r.status === "rejected" ? "bg-error-500" : "bg-warning-500"}`} />
+                    <div className="grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_220px] lg:items-start">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2 font-semibold">
+                          Attempt {r.attempt} <StatusPill status={r.status} />
+                        </div>
+                        <div className="num mt-0.5 text-[12px] text-muted">Submitted {fmtDateTime(r.submittedAt)}</div>
+                        {r.decidedAt && <div className="num text-[12px] text-muted">Decided {fmtDateTime(r.decidedAt)} · {r.decidedBy}</div>}
+                        {r.reason && <div className="mt-1 text-[12.5px] text-error-600">Reason: {r.reason}</div>}
+                      </div>
+                      <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[12.5px]">
+                        {r.checks.map((c) => (
+                          <div key={c.id} className="contents">
+                            <dt className="text-muted">{checkLabel(c.check)}</dt>
+                            <dd className="min-w-0 break-words">
+                              {[c.documentType, c.documentMasked].filter(Boolean).join(" · ") || "—"}
+                              {c.matchScore !== undefined && <span className={c.matchScore < 70 ? "font-semibold text-error-600" : "text-muted"}> · {c.matchScore}% match</span>}
+                              <span className="block font-mono text-[11px] text-muted">{c.provider} · {c.reference}</span>
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <div className="flex flex-col gap-2 lg:items-end">
+                        {r.checks.some((c) => c.check === "liveness" || c.check === "id_document") && <EvidencePlaceholder canView={canMedia} />}
+                        {r.status === "pending" && (canDecide ? <KycDecision id={r.id} title={kycTierTitle(r.tier)} /> : <span className="text-[12px] text-muted">Awaiting a reviewer</span>)}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
             </Panel>
           </li>
         );

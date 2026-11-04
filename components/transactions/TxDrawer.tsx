@@ -9,24 +9,24 @@ import { AssetIcon, Money } from "@/components/ui/Money";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { previewTransaction } from "@/lib/actions/admin";
 import { typeLabel } from "@/lib/domain/catalog";
-import { fmtDateTime, fmtInt, fmtUsd } from "@/lib/format";
+import { fmtDateTime, fmtUsd } from "@/lib/format";
 import { useTxDrawer } from "@/stores/tx-drawer-store";
-import { BalanceImpact, LegTimeline } from "./LegTimeline";
+import { JournalEntries, SwapRoute } from "./LegTimeline";
 import { Route, routeOf } from "./Route";
 
 type Preview = NonNullable<Awaited<ReturnType<typeof previewTransaction>>>;
 
-// Legs are fetched on demand (server action) and memoised per id, so lists
-// stay light: rows never ship their legs.
+// Journal and swap legs are fetched on demand (server action) and memoised
+// per id, so lists stay light: rows never ship their legs.
 const cache = new Map<string, Preview | null>();
 
 /** Opens the quick view for a transaction. */
-export function LegsButton({ id, count }: { id: string; count: number }) {
+export function LegsButton({ id }: { id: string }) {
   const show = useTxDrawer((s) => s.show);
   return (
-    <button type="button" onClick={() => show(id)} className="pop inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-surface px-2.5 text-[11.5px] font-bold" aria-label={`View ${count} legs`}>
+    <button type="button" onClick={() => show(id)} className="pop inline-flex h-7 cursor-pointer items-center gap-1 rounded-full bg-surface px-2.5 text-[11.5px] font-bold" aria-label="Quick view: ledger legs">
       <Icon name="legs" size={13} />
-      {count} legs
+      Legs
     </button>
   );
 }
@@ -87,7 +87,7 @@ export function TxDrawer() {
                     <span className="font-mono text-[12px] text-muted">{p.tx.reference}</span>
                   </div>
                   <h2 className="display mt-2 text-[26px] font-extrabold uppercase">{p.tx.title}</h2>
-                  <div className="mt-2"><Route assets={routeOf(p.tx)} /></div>
+                  <div className="mt-2"><Route assets={routeOf(p.tx, p.swapLegs)} /></div>
                   <dl className="mt-4 grid grid-cols-2 gap-3 text-[12.5px]">
                     <div>
                       <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">{p.tx.direction === "in" ? "Received in" : "Paid with"}</dt>
@@ -97,19 +97,21 @@ export function TxDrawer() {
                       <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">{p.tx.direction === "in" ? "Credited" : "Delivered"}</dt>
                       <dd className="mt-1 font-semibold">{p.tx.destination ? <Money asset={p.tx.destination.asset} amount={p.tx.destination.amount} icon /> : "—"}</dd>
                     </div>
-                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Fee</dt><dd className="mt-1">{p.tx.fee.amount ? <Money asset={p.tx.fee.asset} amount={p.tx.fee.amount} icon /> : "None"}</dd></div>
-                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Revenue · value</dt><dd className="num mt-1">₦{fmtInt(p.tx.markupRevenueNgn)} · ≈{fmtUsd(p.tx.usdValue)}</dd></div>
+                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Fee</dt><dd className="mt-1">{p.tx.fee && /[1-9]/.test(p.tx.fee.amount) ? <Money asset={p.tx.fee.asset} amount={p.tx.fee.amount} icon /> : "None"}</dd></div>
+                    <div><dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Value</dt><dd className="num mt-1">≈ {fmtUsd(p.tx.usdValue)}</dd></div>
                   </dl>
                   {p.customer && <p className="mt-3 text-[12.5px] text-muted">{fmtDateTime(p.tx.createdAt)} · <Link onClick={close} className="font-semibold text-fg underline decoration-2 underline-offset-2" href={`/customers/${p.customer.id}`}>{p.customer.firstName} {p.customer.lastName}</Link> @{p.customer.tag}</p>}
                   {p.tx.failureReason && <p className="mt-3 rounded-chip bg-error-50 px-3 py-2 text-[12.5px] font-medium text-error-600 dark:bg-error-600/20 dark:text-error-50">{p.tx.failureReason}</p>}
                 </section>
+                {p.swapLegs.length > 0 && (
+                  <section className="card p-4">
+                    <h3 className="display mb-4 text-[18px] font-bold uppercase">Route · {p.swapLegs.length} hops</h3>
+                    <SwapRoute legs={p.swapLegs} />
+                  </section>
+                )}
                 <section className="card p-4">
-                  <h3 className="display mb-3 text-[18px] font-bold uppercase">Balances</h3>
-                  <BalanceImpact customer={p.customerImpact} system={p.systemImpact} people={p.people} />
-                </section>
-                <section className="card p-4">
-                  <h3 className="display mb-4 text-[18px] font-bold uppercase">Legs · {p.tx.legs.length}</h3>
-                  <LegTimeline legs={p.tx.legs} pools={p.pools} people={p.people} compact />
+                  <h3 className="display mb-4 text-[18px] font-bold uppercase">Journal · {p.journal.reduce((n, j) => n + j.legs.length, 0)} legs</h3>
+                  <JournalEntries journal={p.journal} compact />
                 </section>
               </div>
             )}

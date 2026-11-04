@@ -26,7 +26,7 @@ export function Badge({ tone = "neutral", children, dot, className }: { tone?: T
 const STATUS_TONE: Record<string, Tone> = {
   completed: "success", approved: "success", active: "success", ready: "success", resolved: "success",
   pending: "warning", review: "warning", open: "warning",
-  failed: "error", frozen: "error", closed: "neutral", cancelled: "neutral", reversed: "orange", none: "neutral",
+  failed: "error", rejected: "error", frozen: "error", closed: "neutral", cancelled: "neutral", reversed: "orange", none: "neutral",
 };
 
 export function StatusPill({ status, label }: { status: string; label?: string }) {

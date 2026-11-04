@@ -66,3 +66,16 @@ export function PanelSkeleton({ className, title = true, children }: { className
     </div>
   );
 }
+
+/** Stands in for <PageHeader> in route loading states, so the real shell lands without a jump. */
+export function HeaderSkeleton() {
+  return (
+    <div className="mb-8" aria-hidden>
+      <Skeleton className="h-12 w-72 max-w-full" />
+      <Skeleton className="mt-4 h-4 w-full max-w-3xl" />
+    </div>
+  );
+}
+
+/** A tab bar placeholder (same height as LinkTabs / ButtonTabs). */
+export const TabsSkeleton = ({ className }: { className?: string }) => <Skeleton className={cx("h-11 w-80 max-w-full rounded-full", className)} />;

@@ -30,12 +30,12 @@ async function Results({ params, searchParams }: PageProps<"/customers/[id]/tran
       <LinkTabs
         label="Transaction categories"
         items={[
-          { href: path, label: "All", count: res.counts.all ?? 0, active: !category },
-          ...CATEGORIES.map((c) => ({ href: hrefWith(path, {}, { category: c.id }), label: c.label, count: res.counts[c.id] ?? 0, active: category === c.id })),
+          { href: path, label: "All", count: !category ? res.total : undefined, active: !category },
+          ...CATEGORIES.map((c) => ({ href: hrefWith(path, {}, { category: c.id }), label: c.label, count: category === c.id ? res.total : undefined, active: category === c.id })),
         ]}
       />
       <div className="card overflow-hidden">
-        {res.rows.length ? <TxTable rows={res.rows} showCustomer={false} category={category} /> : <Empty title="No transactions here" />}
+        {res.rows.length ? <TxTable rows={res.rows} showCustomer={false} /> : <Empty title="No transactions here" />}
         <Pagination path={path} params={{ category }} {...res} />
       </div>
     </div>

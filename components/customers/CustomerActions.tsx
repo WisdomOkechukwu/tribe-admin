@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { setCustomerLabels, setCustomerStatus, type ActionResult } from "@/lib/actions/admin";
 import { toast } from "@/stores/toast-store";
 
-export function FreezeButton({ id, status, name }: { id: string; status: string; name: string }) {
+export function FreezeButton({ id, status, name, version }: { id: string; status: string; name: string; version: number }) {
   const [open, setOpen] = useState(false);
   const [, action, pending] = useActionState<ActionResult | null, FormData>(async (prev, fd) => {
     const res = await setCustomerStatus(prev, fd);
@@ -27,6 +27,7 @@ export function FreezeButton({ id, status, name }: { id: string; status: string;
         <form action={action} className="space-y-4 p-5">
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="status" value={freezing ? "frozen" : "active"} />
+          <input type="hidden" name="version" value={version} />
           <label className="block">
             <span className="mb-1.5 block text-[12.5px] font-medium">Reason (goes to the audit log)</span>
             <textarea name="reason" required minLength={3} maxLength={200} rows={3} className="w-full rounded-chip border border-line bg-surface p-3 outline-none focus:border-purple-300 focus-visible:outline-none" placeholder={freezing ? "e.g. Suspected account takeover, ticket SUP-…" : "e.g. Identity re-verified"} />
