@@ -6,7 +6,7 @@ import { assetInfo, rememberAssets } from "@/lib/domain/catalog";
 import { fromUnits } from "@/lib/domain/money";
 import { detectRole, normalisePerms, asAvatarColor, type Permission } from "@/lib/domain/permissions";
 import type {
-  ApiRequest, AssetCode, AuditEvent, CardDesign, Customer, CustomerAdjustment, CustomerRow, FreeFunds, Jobs, JournalLeg, JournalView, LedgerAccount,
+  ApiRequest, AssetCode, AuditEvent, CardDesign, Customer, CustomerAdjustment, CustomerRow, FreeFunds, Jobs, JournalLeg, JournalView, LedgerAccount, ReferralSettings,
   LedgerSnapshot, Page, Provider, RateMargin, RatePoint, RatesSnapshot, ServiceSwitch, SupportMessage, SupportThread, SwapLeg, TransactionFee, TreasuryFunding,
   TxCategory, TxDetail, TxRow, TxStatus, VerificationSubmission,
 } from "@/lib/domain/types";
@@ -68,6 +68,7 @@ type GEntry = {
 type GAccount = {
   id: number; account_number: string; owner_key: string; code: string; name: string; category: string; normal_side: "debit" | "credit"; asset_code: string;
   user_id: string | null; account_type: string; allow_negative: boolean; status: string; created_at: string; balance: string;
+  provider_id?: string; provider_name?: string; provider_category?: string; provider_simulator?: boolean;
 };
 
 // ── Currencies the API has that this app's built-in list does not ────────────
@@ -140,6 +141,7 @@ const toAccount = (a: GAccount): LedgerAccount => ({
   id: a.id, accountNumber: a.account_number, ownerKey: a.owner_key, code: a.code, name: a.name, category: a.category, normalSide: a.normal_side,
   asset: asset(a.asset_code), userId: a.user_id ?? undefined, accountType: a.account_type, allowNegative: a.allow_negative, status: a.status,
   balance: a.balance, createdAt: a.created_at,
+  providerId: a.provider_id, providerName: a.provider_name, providerCategory: a.provider_category, providerSimulator: a.provider_simulator,
 });
 
 // ── Customers ────────────────────────────────────────────────────────────────
@@ -329,13 +331,13 @@ export async function listApiTrail(f: TrailFilters & { customerId?: string }) {
 }
 
 // ── Inventory & treasury ─────────────────────────────────────────────────────
-/** Company accounts per asset: vault (money we hold), cashpoint escrow, payouts in transit. */
+/** The money the providers hold: every provider vault (one per provider per currency) and every currency's Tribe Funds. */
 export async function listInventory() {
   await requirePerm("inventory.view");
   return ((await get<GAccount[] | null>("/inventory")) ?? []).map(toAccount);
 }
 
-/** Journal legs on the company vault accounts. null = the backend route isn't live yet. */
+/** Journal legs on the provider vaults. null = the backend route isn't live yet. */
 export async function listInventoryEntries(f: { asset?: string; page: number }) {
   await requirePerm("inventory.view");
   const p = await getOrNull<GPage<GLeg>>("/inventory/entries", { asset: f.asset, page: f.page });
@@ -343,12 +345,12 @@ export async function listInventoryEntries(f: { asset?: string; page: number }) 
 }
 
 type GFunding = {
-  id: string; asset_code: string; amount: string; amount_decimal?: string; external_reference: string; note: string; status?: string;
+  id: string; asset_code: string; provider_id?: string | null; amount: string; amount_decimal?: string; external_reference: string; note: string; status?: string;
   requested_by: string; requested_by_name: string; approved_by?: string | null; approved_by_name?: string; decided_at?: string | null;
   rejection_reason?: string; journal_entry_id: string; created_at: string;
 };
 const toFunding = (f: GFunding): TreasuryFunding => ({
-  id: f.id, asset: asset(f.asset_code), amount: f.amount_decimal ?? fromUnits(f.asset_code, f.amount), externalReference: f.external_reference, note: f.note,
+  id: f.id, asset: asset(f.asset_code), providerId: f.provider_id ?? undefined, amount: f.amount_decimal ?? fromUnits(f.asset_code, f.amount), externalReference: f.external_reference, note: f.note,
   // Older rows (before the two-person check) have no status: they were posted on creation.
   status: (f.status || (f.journal_entry_id ? "approved" : "pending")) as TreasuryFunding["status"],
   requestedBy: f.requested_by, requestedByName: f.requested_by_name, approvedBy: f.approved_by ?? undefined, approvedByName: f.approved_by_name || undefined,
@@ -360,12 +362,22 @@ export async function listTreasuryFundings(f: { status?: string; page: number })
   return pageOf(await get<GPage<GFunding>>("/treasury-fundings", { status: f.status, page: f.page }), toFunding);
 }
 
-/** Per currency: vault, owed to customers, and free (the most admins may credit). null = the backend route isn't live yet. */
+/** Per currency: provider vaults, owed to customers, free, and Tribe Funds (the most admins may credit). null = the backend route isn't live yet. */
 export async function listFreeFunds(): Promise<FreeFunds[] | null> {
   await requirePerm("inventory.view");
-  const funds = await getOrNull<{ asset_code: string; vault: string; owed: string; free: string }[] | null>("/free-funds");
-  return funds === null ? null : funds.map((f) => ({ asset: asset(f.asset_code), vault: f.vault, owed: f.owed, free: f.free }));
+  const funds = await getOrNull<{ asset_code: string; vaults: string; owed: string; free: string; tribe_funds: string }[] | null>("/free-funds");
+  return funds === null ? null : funds.map((f) => ({ asset: asset(f.asset_code), vaults: f.vaults, owed: f.owed, free: f.free, tribeFunds: f.tribe_funds }));
 }
+
+/** The referral share (percent of earnings paid to inviters). null = the backend route isn't live yet. */
+export async function getReferralSettings(): Promise<ReferralSettings | null> {
+  await requirePerm("markups.view");
+  const r = await getOrNull<{ share_percent: string; version: number; updated_by: string; updated_at: string }>("/referral-settings");
+  return r === null ? null : { sharePercent: trimPercent(r.share_percent), version: r.version, updatedBy: r.updated_by, updatedAt: r.updated_at };
+}
+
+/** "2.000000" -> "2", "2.500000" -> "2.5" */
+const trimPercent = (v: string) => (v.includes(".") ? v.replace(/0+$/, "").replace(/\.$/, "") : v);
 
 type GAdjustment = {
   id: string; user_id: string; kind: string; asset_code: string; amount: string; amount_decimal?: string; reason: string; status: string;
@@ -525,11 +537,11 @@ export async function getOverviewFailures() {
   return (f ?? []).map(toTx);
 }
 
-/** Company vaults for the overview: /inventory when the admin may see it, else what the aggregate carries. */
+/** Provider vaults for the overview: /inventory when the admin may see it, else what the aggregate carries. */
 export async function getOverviewVaults() {
   const a = await requirePerm("overview.view");
   const accounts = a.has("inventory.view") ? await get<GAccount[] | null>("/inventory") : (await overview()).inventory;
-  return (accounts ?? []).map(toAccount).filter((v) => v.code === "company_vault");
+  return (accounts ?? []).map(toAccount).filter((v) => v.code === "provider_vault");
 }
 
 // ── Providers, card designs, jobs ────────────────────────────────────────────

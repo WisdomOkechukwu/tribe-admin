@@ -10,22 +10,30 @@ import { assetInfo } from "@/lib/domain/catalog";
 import { fmtMoney } from "@/lib/format";
 import { toast } from "@/stores/toast-store";
 
-export type VaultOpt = { asset: string; balance: string };
+/** One provider vault: the provider and the currency it holds for Tribe. */
+export type VaultOpt = { providerId: string; providerName: string; asset: string; balance: string };
+
+const keyOf = (v: VaultOpt) => `${v.providerId}:${v.asset}`;
 
 const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
 /**
- * Step 1 of a treasury funding: record money that arrived in a company
- * account. Nothing is posted until a DIFFERENT admin approves it.
+ * Step 1 of a treasury funding: record Tribe's own money that arrived at a
+ * provider (it lands in that provider's vault and in Tribe Funds). Nothing is
+ * posted until a DIFFERENT admin approves it.
  * One Idempotency-Key per submission: a double-click or retry can't record it twice.
  */
 export function FundingForm({ vaults, canRequest }: { vaults: VaultOpt[]; canRequest: boolean }) {
-  const [asset, setAsset] = useState(vaults.find((v) => v.asset === "NGN")?.asset ?? vaults[0]?.asset ?? "NGN");
+  const [selected, setSelected] = useState(() => {
+    const first = vaults.find((v) => v.asset === "NGN") ?? vaults[0];
+    return first ? keyOf(first) : "";
+  });
   const [raw, setRaw] = useState("");
   // made on the first submit (never while rendering, so the server and browser HTML match) and
   // reused if that same submission is retried; a successful one starts a fresh key
   const key = useRef<string | null>(null);
-  const vault = vaults.find((v) => v.asset === asset);
+  const vault = vaults.find((v) => keyOf(v) === selected);
+  const asset = vault?.asset ?? "NGN";
   const decimals = assetInfo(asset).decimals;
   const clean = raw.replace(/,/g, "");
   const valid = /^\d+(\.\d+)?$/.test(clean) && /[1-9]/.test(clean) && (clean.split(".")[1]?.length ?? 0) <= decimals;
@@ -47,13 +55,14 @@ export function FundingForm({ vaults, canRequest }: { vaults: VaultOpt[]; canReq
   return (
     <form action={action} className="space-y-5">
       <input type="hidden" name="asset" value={asset} />
+      <input type="hidden" name="providerId" value={vault?.providerId ?? ""} />
       <input type="hidden" name="amount" value={clean} />
 
       <fieldset disabled={!canRequest || pending} className="space-y-5 disabled:opacity-60">
         <div>
-          <Label n={1}>Which vault?</Label>
-          <Picker label="Asset" value={asset} onChange={(v) => setAsset(v || asset)} options={vaults.map((v) => ({ value: v.asset, label: `${v.asset} · ${fmtMoney(v.asset, v.balance)}` }))} />
-          <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-muted"><AssetIcon asset={asset} size={14} /> {assetInfo(asset).name} · up to {decimals} decimals</p>
+          <Label n={1}>Which provider vault?</Label>
+          <Picker label="Provider vault" value={selected} onChange={(v) => setSelected(v || selected)} options={vaults.map((v) => ({ value: keyOf(v), label: `${v.providerName} · ${v.asset} · ${fmtMoney(v.asset, v.balance)}` }))} />
+          <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-muted"><AssetIcon asset={asset} size={14} /> {assetInfo(asset).name} at {vault?.providerName ?? "the provider"} · up to {decimals} decimals</p>
         </div>
 
         <div>
@@ -80,7 +89,7 @@ export function FundingForm({ vaults, canRequest }: { vaults: VaultOpt[]; canReq
               <span className="text-muted">{fmtMoney(asset, vault.balance)}</span> <span aria-hidden>→</span>{" "}
               <b className="text-success-600 dark:text-success-300">+{fmtMoney(asset, clean)}</b>
             </div>
-            <p className="mt-1 text-[11.5px] text-muted">Posts Dr Company Vault / Cr Treasury Funding once a second admin approves.</p>
+            <p className="mt-1 text-[11.5px] text-muted">Posts Dr {vault.providerName} · {asset} / Cr Tribe Funds {asset} once a second admin approves.</p>
           </div>
         )}
 

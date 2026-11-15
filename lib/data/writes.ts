@@ -26,9 +26,11 @@ export type FeeInput = { type: string; feePct: string; flatFee: string; flatFeeA
 export const saveFee = (f: FeeInput, k: Key = {}) =>
   put(`/transaction-fees/${encodeURIComponent(f.type)}`, { fee_percent: f.feePct, flat_fee: f.flatFee, flat_fee_asset: f.flatFeeAsset, maximum_fee: f.maxFee, active: f.active, version: f.version }, k);
 
+export const saveReferralShare = (sharePercent: string, version: number, k: Key = {}) => put("/referral-settings", { share_percent: sharePercent, version }, k);
+
 // ── Treasury (two-person check) ──────────────────────────────────────────────
-export const requestTreasuryFunding = (input: { asset: string; amount: string; externalReference: string; note?: string }, k: Key = {}) =>
-  post<{ id: string; status?: string }>("/treasury-fundings", { asset: input.asset, amount: input.amount, external_reference: input.externalReference, note: input.note ?? "" }, k);
+export const requestTreasuryFunding = (input: { asset: string; providerId?: string; amount: string; externalReference: string; note?: string }, k: Key = {}) =>
+  post<{ id: string; status?: string }>("/treasury-fundings", { asset: input.asset, provider_id: input.providerId ?? "", amount: input.amount, external_reference: input.externalReference, note: input.note ?? "" }, k);
 
 export const approveTreasuryFunding = (id: string, k: Key = {}) => post(`/treasury-fundings/${encodeURIComponent(id)}/approve`, {}, k);
 export const rejectTreasuryFunding = (id: string, reason: string, k: Key = {}) => post(`/treasury-fundings/${encodeURIComponent(id)}/reject`, { reason }, k);

@@ -205,6 +205,11 @@ export type LedgerAccount = {
   status: string;
   balance: Amount;
   createdAt: string;
+  /** provider vaults only: the provider that holds this money */
+  providerId?: string;
+  providerName?: string;
+  providerCategory?: string;
+  providerSimulator?: boolean;
 };
 
 export type LedgerSnapshot = {
@@ -225,6 +230,8 @@ export type FundingStatus = "pending" | "approved" | "rejected";
 export type TreasuryFunding = {
   id: string;
   asset: AssetCode;
+  /** the provider vault funded (absent on old rows: the currency's home provider) */
+  providerId?: string;
   amount: Amount;
   externalReference: string;
   note: string;
@@ -263,7 +270,15 @@ export type CustomerAdjustment = {
 };
 
 /** Per currency: the vault, what customers are owed, and the difference admins may credit (can be negative). */
-export type FreeFunds = { asset: AssetCode; vault: Amount; owed: Amount; free: Amount };
+/**
+ * One currency the way the providers see it: everything the provider vaults hold, what we owe
+ * customers, the difference (free), and Tribe Funds. Free and Tribe Funds are always equal (the
+ * ledger's core rule); Tribe Funds is the most admins may credit.
+ */
+export type FreeFunds = { asset: AssetCode; vaults: Amount; owed: Amount; free: Amount; tribeFunds: Amount };
+
+/** The referral share: the percent of what Tribe earns on an invited customer's transaction that goes to the inviter. */
+export type ReferralSettings = { sharePercent: string; version: number; updatedBy: string; updatedAt: string };
 
 // ── Pricing: rate margins (per asset) + transaction fees (per type) ─
 export type RateMargin = { asset: AssetCode; buyPct: string; sellPct: string; version: number; updatedBy: string; updatedAt: string };

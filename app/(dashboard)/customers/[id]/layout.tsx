@@ -75,7 +75,7 @@ async function Header({ params }: Pick<LayoutProps<"/customers/[id]">, "params">
   );
 }
 
-/** The credit / debit button streams in on its own: its credit limit is the vault's free funds (needs inventory.view). */
+/** The credit / debit button streams in on its own: its credit limit is the currency's Tribe Funds (needs inventory.view). */
 async function Adjust({ withFunds, ...props }: Omit<ComponentProps<typeof AdjustmentButton>, "freeFunds"> & { withFunds: boolean }) {
   const freeFunds = withFunds ? await listFreeFunds().catch(() => null) : null;
   return <AdjustmentButton {...props} freeFunds={freeFunds} />;

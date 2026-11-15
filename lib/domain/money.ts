@@ -28,7 +28,7 @@ export function cleanDecimal(input: string, maxDecimals: number): string | null 
 
 /**
  * Compares two decimal strings exactly (no floats): -1 if a < b, 0 if equal, 1 if a > b.
- * Used to keep a manual credit within the free funds, and a debit within the wallet.
+ * Used to keep a manual credit within Tribe Funds, and a debit within the wallet.
  */
 export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
   const scale = Math.max(a.split(".")[1]?.length ?? 0, b.split(".")[1]?.length ?? 0);
@@ -40,4 +40,19 @@ export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
   };
   const x = units(a), y = units(b);
   return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** Exact decimal add of two decimal strings with `decimals` places (BigInt, no floats). */
+export function addDecimal(a: string, b: string, decimals: number): string {
+  const units = (v: string) => {
+    const negative = v.startsWith("-");
+    const [whole, frac = ""] = v.replace(/^-/, "").split(".");
+    const n = BigInt((whole || "0") + frac.padEnd(decimals, "0").slice(0, decimals));
+    return negative ? -n : n;
+  };
+  const sum = units(a) + units(b);
+  const negative = sum < BigInt(0);
+  const digits = (negative ? -sum : sum).toString().padStart(decimals + 1, "0");
+  const out = decimals ? `${digits.slice(0, -decimals)}.${digits.slice(-decimals)}` : digits;
+  return negative ? `-${out}` : out;
 }

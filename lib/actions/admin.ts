@@ -26,6 +26,7 @@ const invalid = (e: z.ZodError): ActionResult => ({ ok: false, message: e.issues
 // ── Treasury funding (request → a different admin approves) ──────────────────
 const Funding = z.object({
   asset: z.string().trim().toUpperCase().min(2, "Pick an asset.").max(10),
+  providerId: z.string().trim().max(26).optional(),
   amount: z.string().trim().min(1, "Enter an amount."),
   externalReference: z.string().trim().min(3, "Add the bank or provider reference (3+ characters).").max(64),
   note: z.string().trim().max(200).optional(),
@@ -34,11 +35,11 @@ const Funding = z.object({
 export async function requestFunding(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
   try {
     await authorize("inventory.topup");
-    const p = Funding.safeParse({ asset: formData.get("asset"), amount: formData.get("amount"), externalReference: formData.get("externalReference"), note: formData.get("note") || undefined });
+    const p = Funding.safeParse({ asset: formData.get("asset"), providerId: formData.get("providerId") || undefined, amount: formData.get("amount"), externalReference: formData.get("externalReference"), note: formData.get("note") || undefined });
     if (!p.success) return invalid(p.error);
     const amount = cleanDecimal(p.data.amount, assetInfo(p.data.asset).decimals);
     if (!amount || !/[1-9]/.test(amount)) return { ok: false, message: `Enter a positive ${p.data.asset} amount with at most ${assetInfo(p.data.asset).decimals} decimals.`, at: Date.now() };
-    await writes.requestTreasuryFunding({ asset: p.data.asset, amount, externalReference: p.data.externalReference, note: p.data.note }, { idempotencyKey: String(formData.get("idempotencyKey") || "") || undefined });
+    await writes.requestTreasuryFunding({ asset: p.data.asset, providerId: p.data.providerId, amount, externalReference: p.data.externalReference, note: p.data.note }, { idempotencyKey: String(formData.get("idempotencyKey") || "") || undefined });
     return done(`Requested ${fmtMoney(p.data.asset, amount)}. Another admin must approve it before it's posted.`);
   } catch (e) {
     return toActionResult(e);
@@ -129,6 +130,21 @@ export async function saveFees(rows: unknown): Promise<ActionResult> {
     if (!p.data.length) return { ok: true, message: "No changes to save.", at: Date.now() };
     for (const f of p.data) await writes.saveFee(f);
     return done(`Saved ${p.data.length} fee rule${p.data.length > 1 ? "s" : ""}.`);
+  } catch (e) {
+    return toActionResult(e);
+  }
+}
+
+const ReferralShare = z.object({ sharePercent: pct(100), version: z.coerce.number().int().min(0) });
+
+/** The referral share: the percent of what Tribe earns on an invited customer's transaction paid to the inviter. */
+export async function saveReferralShare(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  try {
+    await authorize("markups.edit");
+    const p = ReferralShare.safeParse({ sharePercent: formData.get("sharePercent"), version: formData.get("version") });
+    if (!p.success) return invalid(p.error);
+    await writes.saveReferralShare(p.data.sharePercent, p.data.version, { idempotencyKey: String(formData.get("idempotencyKey") || "") || undefined });
+    return done(`Referral share set to ${p.data.sharePercent}%. It applies to transactions from now on.`);
   } catch (e) {
     return toActionResult(e);
   }

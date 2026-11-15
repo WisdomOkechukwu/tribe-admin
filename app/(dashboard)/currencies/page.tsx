@@ -11,7 +11,8 @@ import { PageHeader } from "@/components/ui/Panel";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { getAccess } from "@/lib/auth/current";
 import { listCurrencies, listInventory, listProviders } from "@/lib/data/repo";
-import { NETWORKS, assetFace } from "@/lib/domain/catalog";
+import { NETWORKS, assetFace, assetInfo } from "@/lib/domain/catalog";
+import { addDecimal } from "@/lib/domain/money";
 import type { AssetCode } from "@/lib/domain/types";
 import { fmtCompact, fmtDateTime, fmtMoney, fmtPct, fmtRate, signOf, toNum } from "@/lib/format";
 
@@ -23,7 +24,7 @@ export default function CurrenciesPage() {
       <PageHeader
         eyebrow="the lineup"
         title="Currencies"
-        subtitle="Every fiat and crypto asset the backend supports: how it looks in the app, its live rate, which provider converts it and what the company vault holds. Tap a card to see its transactions."
+        subtitle="Every fiat and crypto asset the backend supports: how it looks in the app, its live rate, which provider converts it and what the providers hold of it. Tap a card to see its transactions."
         actions={<Link href="/rates" className="link text-[12.5px]">Live rates & margins →</Link>}
       />
       <Suspense fallback={<CurrenciesSkeleton />}>
@@ -33,12 +34,14 @@ export default function CurrenciesPage() {
   );
 }
 
-/** Streams into each card: one /inventory call shared by every card (repo cache). */
+/** Streams into each card: what every provider holds in this currency, from one /inventory call shared by every card (repo cache). */
 async function VaultBalance({ code }: { code: AssetCode }) {
   const access = await getAccess();
   if (!access.has("inventory.view")) return <span className="text-muted">Needs “See inventory”</span>;
-  const balance = (await listInventory().catch(() => [])).find((v) => v.code === "company_vault" && v.asset === code)?.balance;
-  return balance === undefined ? <span className="text-muted">—</span> : <>{fmtMoney(code, balance)}</>;
+  const vaults = (await listInventory().catch(() => [])).filter((v) => v.code === "provider_vault" && v.asset === code);
+  if (!vaults.length) return <span className="text-muted">—</span>;
+  const total = vaults.reduce((sum, v) => addDecimal(sum, v.balance, assetInfo(code).decimals), "0");
+  return <>{fmtMoney(code, total)}</>;
 }
 
 /** Streams into each card: one /providers call shared by every card (repo cache). */
@@ -114,7 +117,7 @@ async function Grid() {
                       <dd className={`num mt-0.5 text-[16px] font-extrabold ${signOf(change) > 0 ? "text-success-600 dark:text-success-300" : signOf(change) < 0 ? "text-error-600 dark:text-error-50" : ""}`}>{signOf(change) > 0 ? "+" : ""}{fmtPct(change)}</dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Company vault</dt>
+                      <dt className="text-[10.5px] font-bold uppercase tracking-wider text-muted">Held by providers</dt>
                       <dd className="num mt-0.5 font-semibold"><Suspense fallback={<Skeleton className="mt-1 h-4 w-28" />}><VaultBalance code={a.code} /></Suspense></dd>
                     </div>
                     <div className="col-span-2 flex flex-wrap items-center gap-2">

@@ -64,7 +64,7 @@ function Board({ kpis, series, categories, attention, vaults, failures }: Record
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Needs attention" bodyClass="p-3">{attention}</Panel>
-        <Panel title="Company vaults" action={<Link href="/inventory" className="link text-[12.5px]">Inventory →</Link>} bodyClass="p-0">{vaults}</Panel>
+        <Panel title="Provider vaults" action={<Link href="/inventory" className="link text-[12.5px]">Inventory →</Link>} bodyClass="p-0">{vaults}</Panel>
       </div>
       <Panel title="Recent failures" bodyClass="p-0" action={<Link href="/transactions?status=failed" className="link text-[12.5px]">All failures →</Link>}>{failures}</Panel>
     </div>
@@ -145,7 +145,7 @@ async function NeedsAttention() {
 
 async function EmptyVaults() {
   const r = await settle(getOverviewVaults);
-  return r.ok ? <Attention href="/inventory#fundings" label="Company vaults with no money" value={r.data.filter((v) => !/[1-9]/.test(v.balance)).length} hot={false} /> : null;
+  return r.ok ? <Attention href="/inventory#fundings" label="Provider vaults empty or overdrawn" value={r.data.filter((v) => !/[1-9]/.test(v.balance) || v.balance.startsWith("-")).length} hot={r.data.some((v) => v.balance.startsWith("-"))} /> : null;
 }
 
 async function Vaults() {
@@ -155,7 +155,10 @@ async function Vaults() {
     <ul className="grid grid-cols-1 divide-y-2 divide-line sm:grid-cols-2 sm:divide-y-0">
       {r.data.map((v) => (
         <li key={v.id} className="flex items-center justify-between gap-3 border-line px-5 py-2.5 sm:border-b">
-          <span className="inline-flex items-center gap-2 font-semibold"><AssetIcon asset={v.asset} size={18} />{v.asset}</span>
+          <span className="inline-flex min-w-0 items-center gap-2 font-semibold">
+            <AssetIcon asset={v.asset} size={18} />{v.asset}
+            <span className="truncate text-[12px] font-normal text-muted">{v.providerName}</span>
+          </span>
           <Money asset={v.asset} amount={v.balance} className="font-semibold" />
         </li>
       ))}

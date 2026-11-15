@@ -22,7 +22,7 @@ export const PERMISSION_GROUPS = [
       { key: "customers.pii", label: "Unmasked personal data", hint: "Full email, phone, address and date of birth (masked otherwise)", risk: "sensitive" },
       { key: "customers.labels", label: "Edit labels", hint: "Add or remove internal labels like VIP or watchlist", risk: "action" },
       { key: "customers.freeze", label: "Freeze & unfreeze accounts", hint: "Stop a customer from moving money", risk: "action" },
-      { key: "adjustments.request", label: "Request manual credits & debits", hint: "Ask to credit a customer from the vault's free funds, or debit their wallet (a super admin must approve)", risk: "action" },
+      { key: "adjustments.request", label: "Request manual credits & debits", hint: "Ask to credit a customer from Tribe Funds, or debit their wallet (a super admin must approve)", risk: "action" },
       { key: "adjustments.approve", label: "Approve manual credits & debits", hint: "Super admins only: approve or reject someone else's credit/debit, posts it to the ledger", risk: "sensitive" },
     ],
   },
@@ -48,8 +48,8 @@ export const PERMISSION_GROUPS = [
   {
     id: "inventory", label: "Inventory", icon: "inventory", route: "/inventory",
     items: [
-      { key: "inventory.view", label: "See inventory & ledger", hint: "Company vaults, treasury fundings and every vault movement", risk: "view" },
-      { key: "inventory.topup", label: "Record treasury funding", hint: "Request money into a company vault (needs a second admin to approve)", risk: "action" },
+      { key: "inventory.view", label: "See inventory & ledger", hint: "Provider vaults, Tribe Funds, treasury fundings and every vault movement", risk: "view" },
+      { key: "inventory.topup", label: "Record treasury funding", hint: "Request Tribe's own money into a provider vault (needs a second admin to approve)", risk: "action" },
       { key: "inventory.approve", label: "Approve treasury funding", hint: "Approve or reject someone else's funding request: posts it to the ledger", risk: "action" },
     ],
   },

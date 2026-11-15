@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Picker } from "@/components/ui/Picker";
 import { requestAdjustment, type ActionResult } from "@/lib/actions/admin";
 import { assetInfo } from "@/lib/domain/catalog";
-import { compareDecimal } from "@/lib/domain/money";
+import { addDecimal, compareDecimal } from "@/lib/domain/money";
 import type { AdjustmentKind, FreeFunds } from "@/lib/domain/types";
 import { fmtMoney, signOf } from "@/lib/format";
 import { toast } from "@/stores/toast-store";
@@ -21,7 +21,7 @@ const plain = (v: string) => (signOf(v) < 0 ? "0" : v.replace(/,/g, ""));
 
 /**
  * Step 1 of a manual credit or debit. The limit is shown up front and enforced:
- *   credit -> the vault's FREE funds (vault minus what customers are owed)
+ *   credit -> the currency's TRIBE FUNDS (Tribe's own money at the providers)
  *   debit  -> the customer's wallet balance
  * Nothing moves until a super admin (not the requester) approves; the API checks
  * the limit again then. One Idempotency-Key per submission.
@@ -40,7 +40,7 @@ export function AdjustmentButton({ customerId, name, wallets, freeFunds }: { cus
 
   const fund = freeFunds?.find((f) => f.asset === asset);
   const wallet = wallets.find((w) => w.asset === asset)?.balance ?? "0";
-  const limit = kind === "credit" ? (fund ? plain(fund.free) : null) : plain(wallet);
+  const limit = kind === "credit" ? (fund ? plain(fund.tribeFunds) : null) : plain(wallet);
   const decimals = assetInfo(asset).decimals;
   const clean = raw.replace(/,/g, "");
   const wellFormed = /^\d+(\.\d+)?$/.test(clean) && /[1-9]/.test(clean) && (clean.split(".")[1]?.length ?? 0) <= decimals;
@@ -96,7 +96,7 @@ export function AdjustmentButton({ customerId, name, wallets, freeFunds }: { cus
 
           {options.length === 0 ? (
             <p className="rounded-chip border-2 border-edge bg-sunken p-3.5 text-[12.5px] text-muted">
-              {kind === "credit" ? "Can't load the vault's free funds (needs “See inventory & ledger”, and an API that serves /free-funds), so crediting is off." : `${name} has no money in any wallet to debit.`}
+              {kind === "credit" ? "Can't load Tribe Funds (needs “See inventory & ledger”, and an API that serves /free-funds), so crediting is off." : `${name} has no money in any wallet to debit.`}
             </p>
           ) : (
             <>
@@ -109,7 +109,7 @@ export function AdjustmentButton({ customerId, name, wallets, freeFunds }: { cus
                   options={options.map((a) => {
                     const f = freeFunds?.find((x) => x.asset === a);
                     const w = wallets.find((x) => x.asset === a)?.balance ?? "0";
-                    return { value: a, label: kind === "credit" ? `${a} · ${fmtMoney(a, f ? plain(f.free) : "0")} free` : `${a} · ${fmtMoney(a, w)} in wallet` };
+                    return { value: a, label: kind === "credit" ? `${a} · ${fmtMoney(a, f ? plain(f.tribeFunds) : "0")} in Tribe Funds` : `${a} · ${fmtMoney(a, w)} in wallet` };
                   })}
                 />
               </div>
@@ -131,12 +131,12 @@ export function AdjustmentButton({ customerId, name, wallets, freeFunds }: { cus
                 <p className="mt-1.5 text-[11.5px] text-muted">
                   {kind === "credit"
                     ? fund
-                      ? <>Vault {fmtMoney(asset, fund.vault)} − owed to customers {fmtMoney(asset, fund.owed)}. Customer money is never handed out.</>
-                      : "Free funds unavailable."
+                      ? <>Tribe Funds {asset}: the providers hold {fmtMoney(asset, fund.vaults)}, customers are owed {fmtMoney(asset, fund.owed)}. Only Tribe&apos;s own share is ever handed out.</>
+                      : "Tribe Funds unavailable."
                     : `What ${name} holds in their ${asset} wallet right now.`}
                 </p>
-                {kind === "credit" && fund && signOf(fund.free) <= 0 && (
-                  <p className="mt-1.5 text-[12px] font-semibold text-error-600">Nothing free in the {asset} vault. Record treasury funding on Inventory first.</p>
+                {kind === "credit" && fund && signOf(fund.tribeFunds) <= 0 && (
+                  <p className="mt-1.5 text-[12px] font-semibold text-error-600">Tribe has no {asset} of its own at the providers. Record treasury funding on Inventory first.</p>
                 )}
               </div>
 
@@ -181,21 +181,6 @@ export function AdjustmentButton({ customerId, name, wallets, freeFunds }: { cus
       </Modal>
     </>
   );
-}
-
-/** Exact decimal add for the "wallet after" preview (BigInt, no floats). */
-function addDecimal(a: string, b: string, decimals: number): string {
-  const units = (v: string) => {
-    const negative = v.startsWith("-");
-    const [whole, frac = ""] = v.replace(/^-/, "").split(".");
-    const n = BigInt((whole || "0") + frac.padEnd(decimals, "0").slice(0, decimals));
-    return negative ? -n : n;
-  };
-  const sum = units(a) + units(b);
-  const negative = sum < BigInt(0);
-  const digits = (negative ? -sum : sum).toString().padStart(decimals + 1, "0");
-  const out = decimals ? `${digits.slice(0, -decimals)}.${digits.slice(-decimals)}` : digits;
-  return negative ? `-${out}` : out;
 }
 
 function Label({ children }: { children: React.ReactNode }) {

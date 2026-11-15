@@ -31,32 +31,35 @@ const pageParam = (p: number) => (p > 1 ? String(p) : undefined);
 
 export type InventoryViewer = { id: string; canDecide: boolean; canSeeLedger: boolean; superAdmin: boolean };
 
-export function FundingsSection({ initial, initialParams, me }: Props<"funding" | "fpage", typeof loadFundings> & { me: InventoryViewer }) {
+export function FundingsSection({ initial, initialParams, me, providerNames }: Props<"funding" | "fpage", typeof loadFundings> & { me: InventoryViewer; providerNames: Record<string, string> }) {
   const s = useSection({ initial, initialParams, load: loadFundings, urlKeys: ["funding", "fpage"] });
   const active = statusOf(s.params.funding);
   return (
     <div className="space-y-3">
       <ButtonTabs label="Funding status" items={STATUSES.map((v) => ({ value: v, label: tabLabel(v), active: active === v }))} onSelect={(v) => s.setParams({ funding: v === "pending" ? undefined : v, fpage: undefined })} />
       <SectionBody section={s} fallback={<TableSkeleton rows={6} />}>
-        {(d) => <Fundings d={d} me={me} onPage={(p) => s.setParams({ fpage: pageParam(p) })} />}
+        {(d) => <Fundings d={d} me={me} providerNames={providerNames} onPage={(p) => s.setParams({ fpage: pageParam(p) })} />}
       </SectionBody>
     </div>
   );
 }
 
-function Fundings({ d, me, onPage }: { d: Data<typeof loadFundings>; me: InventoryViewer; onPage: (p: number) => void }) {
+function Fundings({ d, me, providerNames, onPage }: { d: Data<typeof loadFundings>; me: InventoryViewer; providerNames: Record<string, string>; onPage: (p: number) => void }) {
   return (
     <div className="card overflow-hidden">
       {d.rows.length === 0 ? (
         <Empty title={d.status === "pending" ? "Nothing waiting for approval" : "No funding requests"} hint={d.status === "pending" ? "New requests appear here for a second admin to approve." : undefined} />
       ) : (
         <Table>
-          <THead><Th>Requested</Th><Th>Asset</Th><Th className="text-right">Amount</Th><Th>Reference · note</Th><Th>Requested by</Th><Th>Status</Th><Th>Decided by</Th><Th className="text-right">{me.canDecide && d.status !== "approved" && d.status !== "rejected" ? "Decision" : "Journal"}</Th></THead>
+          <THead><Th>Requested</Th><Th>Provider vault</Th><Th className="text-right">Amount</Th><Th>Reference · note</Th><Th>Requested by</Th><Th>Status</Th><Th>Decided by</Th><Th className="text-right">{me.canDecide && d.status !== "approved" && d.status !== "rejected" ? "Decision" : "Journal"}</Th></THead>
           <tbody>
             {d.rows.map((f) => (
               <Tr key={f.id}>
                 <Td className="num text-muted">{fmtDateTime(f.createdAt)}</Td>
-                <Td><span className="inline-flex items-center gap-1.5 font-semibold"><AssetIcon asset={f.asset} size={16} />{f.asset}</span></Td>
+                <Td>
+                  <span className="inline-flex items-center gap-1.5 font-semibold"><AssetIcon asset={f.asset} size={16} />{f.asset}</span>
+                  <div className="text-[12px] text-muted">{(f.providerId && providerNames[f.providerId]) || "Home provider"}</div>
+                </Td>
                 <Td className="text-right font-bold"><Money asset={f.asset} amount={f.amount} /></Td>
                 <Td className="max-w-72">
                   <div className="truncate font-mono text-[12px]">{f.externalReference}</div>
@@ -131,9 +134,9 @@ export function EntriesSection({ initial, initialParams, assets }: Props<"asset"
             <Empty title="Not available yet" hint="The API doesn't serve vault movements (GET /admin-api/inventory/entries) on this backend yet." />
           ) : (
             <>
-              <div className="border-b-2 border-line px-5 py-2.5 text-[12.5px] text-muted">{fmtInt(res.total)} legs on company vaults</div>
+              <div className="border-b-2 border-line px-5 py-2.5 text-[12.5px] text-muted">{fmtInt(res.total)} legs on provider vaults</div>
               {res.rows.length === 0 ? (
-                <Empty title="No vault movements" />
+                <Empty title="No provider vault movements" />
               ) : (
                 <Table>
                   <THead><Th>Time</Th><Th>Vault</Th><Th>Memo</Th><Th className="text-right">In (debit)</Th><Th className="text-right">Out (credit)</Th><Th>Journal entry</Th></THead>
