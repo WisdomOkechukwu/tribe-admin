@@ -230,6 +230,63 @@ export async function setSupportStatus(threadId: string, status: "open" | "pendi
   }
 }
 
+// ── Currencies ───────────────────────────────────────────────────────────────
+const NewCurrency = z.object({
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,10}$/, "Use 2 to 10 capital letters or digits for the code."),
+  name: z.string().trim().min(1, "Enter a name.").max(64),
+  kind: z.enum(["fiat", "crypto"]),
+  symbol: z.string().trim().max(8, "Keep the symbol to 8 characters."),
+  decimalPlaces: z.number().int().min(0).max(8, "Decimal places must be between 0 and 8."),
+  conversionProviderId: z.string().min(1, "Choose the provider that converts it.").max(26),
+  priceSource: z.enum(["fiat_feed", "coinbase", "usd_peg"]),
+});
+
+export async function createCurrency(input: unknown): Promise<ActionResult> {
+  try {
+    await authorize("currencies.manage");
+    const p = NewCurrency.safeParse(input);
+    if (!p.success) return invalid(p.error);
+    await writes.createCurrency(p.data);
+    return done(`${p.data.code} added, switched off. Switch it on from its card when you are ready.`);
+  } catch (e) {
+    return toActionResult(e);
+  }
+}
+
+const CurrencyChange = z.object({ code: z.string().min(2).max(10), enabled: z.boolean(), version: z.number().int().min(1) });
+
+export async function updateCurrency(input: unknown): Promise<ActionResult> {
+  try {
+    await authorize("currencies.manage");
+    const p = CurrencyChange.safeParse(input);
+    if (!p.success) return invalid(p.error);
+    await writes.updateCurrency(p.data.code, { enabled: p.data.enabled }, p.data.version);
+    return done(p.data.enabled ? "Switched on. It now shows in the app." : "Switched off. It no longer shows in the app.");
+  } catch (e) {
+    return toActionResult(e);
+  }
+}
+
+// ── Service switches ─────────────────────────────────────────────────────────
+const ServiceChange = z.object({
+  code: z.string().min(1).max(40),
+  enabled: z.boolean().optional(),
+  disabledMessage: z.string().trim().max(200, "Keep the message to 200 characters or fewer.").optional(),
+  version: z.number().int().min(0),
+});
+
+export async function updateService(input: unknown): Promise<ActionResult> {
+  try {
+    await authorize("services.manage");
+    const p = ServiceChange.safeParse(input);
+    if (!p.success) return invalid(p.error);
+    await writes.updateService(p.data.code, { enabled: p.data.enabled, disabledMessage: p.data.disabledMessage }, p.data.version);
+    return done(p.data.enabled === undefined ? "Message saved." : p.data.enabled ? "Switched on. Customers can use it again." : "Switched off. Customers can no longer use it.");
+  } catch (e) {
+    return toActionResult(e);
+  }
+}
+
 // ── Providers ────────────────────────────────────────────────────────────────
 const ProviderChange = z.object({ id: z.string().min(1).max(40), usesNgnRail: z.boolean().optional(), enabled: z.boolean().optional(), version: z.number().int().min(0) });
 

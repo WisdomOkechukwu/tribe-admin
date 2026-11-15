@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Gate } from "@/components/access/Gate";
 import Link from "next/link";
 import { Suspense } from "react";
+import { AddCurrencyForm } from "@/components/currencies/AddCurrencyForm";
+import { CurrencySwitch } from "@/components/currencies/CurrencySwitch";
 import { Icon } from "@/components/shell/icons";
 import { Badge } from "@/components/ui/Badge";
 import { AssetIcon } from "@/components/ui/Money";
@@ -55,8 +57,18 @@ function CurrenciesSkeleton() {
   return <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-72 rounded-card" />)}</div>;
 }
 
+/** Only for admins who may add currencies: the form, with the providers a currency can be converted by. */
+async function AddCurrency() {
+  const access = await getAccess();
+  if (!access.has("currencies.manage")) return null;
+  const providers = access.has("providers.view") ? (await listProviders().catch(() => [])).filter((p) => p.assets.length > 0) : [];
+  if (!providers.length) return <p className="text-[12.5px] text-muted">Adding a currency needs “See providers” too, to choose who converts it.</p>;
+  return <AddCurrencyForm providers={providers.map((p) => ({ id: p.id, name: p.name }))} />;
+}
+
 async function Grid() {
-  const { rows, collectedAt, isStale } = await listCurrencies();
+  const [{ rows, collectedAt, isStale }, access] = await Promise.all([listCurrencies(), getAccess()]);
+  const canManage = access.has("currencies.manage");
   const groups = [
     { title: "Fiat", rows: rows.filter((a) => a.kind === "fiat") },
     { title: "Crypto", rows: rows.filter((a) => a.kind === "crypto") },
@@ -67,6 +79,7 @@ async function Grid() {
         <span className={`size-2 rounded-full ${isStale ? "bg-warning-500" : "animate-pulse bg-success-500"}`} aria-hidden />
         {collectedAt ? `Rates collected ${fmtDateTime(collectedAt)} Lagos${isStale ? " · stale" : ""}` : "No rates collected yet"}
       </p>
+      <AddCurrency />
       {groups.map((g) => (
         <section key={g.title}>
           <h2 className="display mb-3 text-[24px] font-extrabold uppercase">{g.title} <span className="text-muted">· {g.rows.length}</span></h2>
@@ -76,7 +89,8 @@ async function Grid() {
               const ngn = toNum(a.ngn);
               const change = a.changePct ?? "0";
               return (
-                <Link key={a.code} href={`/transactions?asset=${a.code}`} className="pop group block overflow-hidden rounded-card bg-surface">
+                <div key={a.code} className={`pop group overflow-hidden rounded-card bg-surface ${a.enabled ? "" : "opacity-80"}`}>
+                <Link href={`/transactions?asset=${a.code}`} className="block">
                   {/* Wallet-card face, in the currency's brand colour. */}
                   <div className="relative overflow-hidden border-b-2 border-edge p-5" style={{ background: face.bg, color: face.fg }}>
                     <span className="display pointer-events-none absolute -top-6 -right-2 text-[130px] leading-none font-extrabold opacity-20 select-none" aria-hidden>{a.symbol}</span>
@@ -113,6 +127,12 @@ async function Grid() {
                     <span className="inline-flex items-center gap-1 transition-transform group-hover:translate-x-1">View <Icon name="arrow" size={14} /></span>
                   </div>
                 </Link>
+                  {/* the card above is one link, so the switch lives under it */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t-2 border-line px-5 py-3">
+                    <CurrencySwitch code={a.code} name={a.name} enabled={a.enabled} version={a.version} canManage={canManage} />
+                    {!a.enabled && <Badge tone="error">Off</Badge>}
+                  </div>
+                </div>
               );
             })}
           </div>

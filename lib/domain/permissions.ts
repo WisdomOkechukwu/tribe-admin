@@ -40,7 +40,10 @@ export const PERMISSION_GROUPS = [
   },
   {
     id: "currencies", label: "Currencies", icon: "coins", route: "/currencies",
-    items: [{ key: "currencies.view", label: "See currencies", hint: "Rates, holders, liquidity cover", risk: "view" }],
+    items: [
+      { key: "currencies.view", label: "See currencies", hint: "Rates, holders, liquidity cover", risk: "view" },
+      { key: "currencies.manage", label: "Add currencies & switch them on or off", hint: "Add a new currency or coin, or stop one being used in the app", risk: "action" },
+    ],
   },
   {
     id: "inventory", label: "Inventory", icon: "inventory", route: "/inventory",
@@ -70,6 +73,13 @@ export const PERMISSION_GROUPS = [
     items: [
       { key: "providers.view", label: "See providers", hint: "Which partner handles which assets", risk: "view" },
       { key: "providers.manage", label: "Change providers & NGN rail", hint: "Turn providers on or off and route conversions through naira", risk: "action" },
+    ],
+  },
+  {
+    id: "services", label: "Services", icon: "lock", route: "/services",
+    items: [
+      { key: "services.view", label: "See service switches", hint: "Which services customers can use right now", risk: "view" },
+      { key: "services.manage", label: "Switch services on & off", hint: "Stop or restart swaps, sends, bills, cards and the rest for every customer", risk: "action" },
     ],
   },
   {
@@ -145,7 +155,7 @@ export const ROLE_PRESETS: { id: Exclude<RoleId, "custom">; label: string; blurb
   { id: "super_admin", label: "Super admin", blurb: "Everything, including pricing and the team.", color: "var(--color-purple-500)", perms: ALL_PERMISSIONS },
   {
     id: "ops", label: "Operations", blurb: "Runs the money: inventory, accounts, KYC, support.", color: "var(--color-orange-500)",
-    perms: normalisePerms(["overview.view", "customers.view", "customers.pii", "customers.labels", "customers.freeze", "adjustments.request", "kyc.view", "kyc.media", "kyc.decide", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "markups.view", "support.view", "support.reply", "support.resolve", "support.simulate", "api.view", "api.bodies", "audit.view", "team.view", "ledger.view", "providers.view", "rates.view", "jobs.view"]),
+    perms: normalisePerms(["overview.view", "customers.view", "customers.pii", "customers.labels", "customers.freeze", "adjustments.request", "kyc.view", "kyc.media", "kyc.decide", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "markups.view", "support.view", "support.reply", "support.resolve", "support.simulate", "api.view", "api.bodies", "audit.view", "team.view", "ledger.view", "providers.view", "services.view", "rates.view", "jobs.view"]),
   },
   {
     id: "support", label: "Support", blurb: "Talks to customers, sees what they did, no money moves.", color: "var(--color-blue-500)",
@@ -157,7 +167,7 @@ export const ROLE_PRESETS: { id: Exclude<RoleId, "custom">; label: string; blurb
   },
   {
     id: "finance", label: "Finance", blurb: "Revenue, liquidity, the ledger and pricing.", color: "var(--color-warning-500)",
-    perms: normalisePerms(["overview.view", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "adjustments.request", "markups.view", "markups.edit", "audit.view", "ledger.view", "providers.view", "rates.view", "jobs.view"]),
+    perms: normalisePerms(["overview.view", "transactions.view", "currencies.view", "inventory.view", "inventory.topup", "adjustments.request", "markups.view", "markups.edit", "audit.view", "ledger.view", "providers.view", "services.view", "rates.view", "jobs.view"]),
   },
   {
     id: "viewer", label: "Read-only", blurb: "Look, don't touch. No personal data.", color: "var(--color-ink-300)",

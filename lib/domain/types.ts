@@ -287,6 +287,19 @@ export type LiveRate = { asset: AssetCode; usd: string; ngn: string; changePct: 
 export type RatesSnapshot = { version: number; collectedAt: string; isStale: boolean; rates: LiveRate[] };
 export type RatePoint = { usd: string; ngn: string; at: string };
 
+// ── Service switches ───────────────────────────────────────
+/** One customer-facing service an admin can switch off (swap, sends, bills, cards…). */
+export type ServiceSwitch = {
+  code: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** what the app shows while it is off ("" = the default message) */
+  disabledMessage: string;
+  version: number;
+  updatedAt: string;
+};
+
 // ── Providers & card designs ───────────────────────────────
 export type Provider = {
   id: string;

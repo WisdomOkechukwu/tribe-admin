@@ -1,13 +1,13 @@
 import "server-only";
 import { cache } from "react";
 import * as api from "@/lib/api/client";
-import { getAccess, requirePerm } from "@/lib/auth/current";
-import { assetInfo } from "@/lib/domain/catalog";
+import { getAccess, requirePerm as checkPerm } from "@/lib/auth/current";
+import { assetInfo, rememberAssets } from "@/lib/domain/catalog";
 import { fromUnits } from "@/lib/domain/money";
 import { detectRole, normalisePerms, asAvatarColor, type Permission } from "@/lib/domain/permissions";
 import type {
   ApiRequest, AssetCode, AuditEvent, CardDesign, Customer, CustomerAdjustment, CustomerRow, FreeFunds, Jobs, JournalLeg, JournalView, LedgerAccount,
-  LedgerSnapshot, Page, Provider, RateMargin, RatePoint, RatesSnapshot, SupportMessage, SupportThread, SwapLeg, TransactionFee, TreasuryFunding,
+  LedgerSnapshot, Page, Provider, RateMargin, RatePoint, RatesSnapshot, ServiceSwitch, SupportMessage, SupportThread, SwapLeg, TransactionFee, TreasuryFunding,
   TxCategory, TxDetail, TxRow, TxStatus, VerificationSubmission,
 } from "@/lib/domain/types";
 
@@ -69,6 +69,33 @@ type GAccount = {
   id: number; account_number: string; owner_key: string; code: string; name: string; category: string; normal_side: "debit" | "credit"; asset_code: string;
   user_id: string | null; account_type: string; allow_negative: boolean; status: string; created_at: string; balance: string;
 };
+
+// ── Currencies the API has that this app's built-in list does not ────────────
+// An admin can add a currency (POST /currencies). Money arrives in smallest units, so before any
+// read maps amounts the server must know that currency's decimal places. Every read starts with
+// requirePerm, which is why the lookup lives there. One request a minute at most, shared by all
+// reads; an admin who may not see currencies simply keeps the built-in list.
+const PRIME_EVERY_MS = 60_000;
+let primedAt = 0;
+let priming: Promise<void> | null = null;
+
+function primeAssets() {
+  if (Date.now() - primedAt < PRIME_EVERY_MS) return Promise.resolve();
+  priming ??= get<{ code: string; name: string; kind: "fiat" | "crypto"; symbol: string; decimal_places: number }[] | null>("/currencies")
+    .then((list) => rememberAssets((list ?? []).map((x) => ({ code: x.code as AssetCode, name: x.name, kind: x.kind, decimals: x.decimal_places, symbol: x.symbol || x.code }))))
+    .catch(() => {})
+    .finally(() => {
+      primedAt = Date.now();
+      priming = null;
+    });
+  return priming;
+}
+
+async function requirePerm(p: Parameters<typeof checkPerm>[0]) {
+  const access = await checkPerm(p);
+  await primeAssets();
+  return access;
+}
 
 // ── Mappers ──────────────────────────────────────────────────────────────────
 const pageOf = <G, T>(p: GPage<G>, map: (g: G) => T): Page<T> => ({
@@ -215,7 +242,7 @@ export async function getTransaction(id: string): Promise<TxDetail | null> {
 }
 
 // ── Currencies & rates ───────────────────────────────────────────────────────
-type GAsset = { code: string; name: string; kind: "fiat" | "crypto"; symbol: string; decimal_places: number; conversion_provider_id: string; display_order: number; enabled: boolean };
+type GAsset = { code: string; name: string; kind: "fiat" | "crypto"; symbol: string; decimal_places: number; conversion_provider_id: string; price_source: string; display_order: number; enabled: boolean; version: number };
 type GRates = { version: number; collected_at: string; is_stale: boolean; rates: Record<string, { usd: string; ngn: string; change_today_percent: string }> | null };
 
 const toRates = (r: GRates): RatesSnapshot => ({
@@ -246,7 +273,7 @@ export async function listCurrencies() {
     collectedAt: rates?.collectedAt ?? null,
     isStale: rates?.isStale ?? true,
     rows: (assets ?? []).map((x) => ({
-      code: asset(x.code), name: x.name, kind: x.kind, symbol: x.symbol, decimals: x.decimal_places, enabled: x.enabled, providerId: x.conversion_provider_id,
+      code: asset(x.code), name: x.name, kind: x.kind, symbol: x.symbol, decimals: x.decimal_places, enabled: x.enabled, providerId: x.conversion_provider_id, priceSource: x.price_source, version: x.version,
       usd: rate.get(asset(x.code))?.usd ?? null, ngn: rate.get(asset(x.code))?.ngn ?? null, changePct: rate.get(asset(x.code))?.changePct ?? null,
     })),
   };
@@ -513,6 +540,16 @@ export async function listProviders() {
   return ((await get<GProvider[] | null>("/providers")) ?? []).map((p): Provider => ({
     id: p.id, slug: p.slug, name: p.name, category: p.category, usesNgnRail: p.uses_ngn_rail, supportsDirectConversion: p.supports_direct_conversion,
     isSimulator: p.is_simulator, enabled: p.enabled, assets: (p.assets ?? []).map(asset), version: p.version, updatedAt: p.updated_at,
+  }));
+}
+
+type GService = { code: string; name: string; description: string; enabled: boolean; disabled_message: string | null; version: number; updated_at: string };
+
+/** Every customer-facing service with its on/off switch, in the API's fixed order. */
+export async function listServices() {
+  await requirePerm("services.view");
+  return ((await get<GService[] | null>("/services")) ?? []).map((x): ServiceSwitch => ({
+    code: x.code, name: x.name, description: x.description, enabled: x.enabled, disabledMessage: x.disabled_message ?? "", version: x.version, updatedAt: x.updated_at,
   }));
 }
 

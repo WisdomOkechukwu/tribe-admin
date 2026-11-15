@@ -37,9 +37,20 @@ export const ASSETS: Record<AssetCode, AssetInfo> = {
   SOL: { code: "SOL", name: "Solana", kind: "crypto", decimals: 8, symbol: "◎", logo: "/logos/crypto/sol.svg" },
 };
 
+/**
+ * Currencies added from the admin panel (Currencies → Add a currency) are not in the list above.
+ * The server learns them from GET /currencies (repo.ts primes this before every read), so their
+ * amounts are converted with THEIR decimal places. In the browser this stays empty and a new
+ * currency falls back to its code and 2 dp.
+ */
+const LEARNED = new Map<string, AssetInfo>();
+export function rememberAssets(list: AssetInfo[]) {
+  for (const a of list) if (!(a.code in ASSETS)) LEARNED.set(a.code, a);
+}
+
 /** Safe lookup: an asset the backend adds later still renders (plain code, 2 dp). */
 export const assetInfo = (code: string): AssetInfo =>
-  ASSETS[code as AssetCode] ?? { code: code as AssetCode, name: code, kind: "fiat", decimals: 2, symbol: code };
+  ASSETS[code as AssetCode] ?? LEARNED.get(code) ?? { code: code as AssetCode, name: code, kind: "fiat", decimals: 2, symbol: code };
 export const assetFace = (code: string) => ASSET_FACE[code as AssetCode] ?? { bg: "var(--color-ink-700)", fg: "#fff" };
 
 export const ASSET_CODES = Object.keys(ASSETS) as AssetCode[];

@@ -44,6 +44,18 @@ export const rejectCustomerAdjustment = (id: string, reason: string, k: Key = {}
 export const updateProvider = (id: string, changes: { usesNgnRail?: boolean; enabled?: boolean; supportsDirectConversion?: boolean }, version: number, k: Key = {}) =>
   put(`/providers/${encodeURIComponent(id)}`, { uses_ngn_rail: changes.usesNgnRail, enabled: changes.enabled, supports_direct_conversion: changes.supportsDirectConversion, version }, k);
 
+// ── Currencies ───────────────────────────────────────────────────────────────
+export type CurrencyInput = { code: string; name: string; kind: "fiat" | "crypto"; symbol: string; decimalPlaces: number; conversionProviderId: string; priceSource: "fiat_feed" | "coinbase" | "usd_peg" };
+// Created switched off, with its margin row, provider link and company ledger accounts.
+export const createCurrency = (c: CurrencyInput, k: Key = {}) =>
+  post("/currencies", { code: c.code, name: c.name, kind: c.kind, symbol: c.symbol, decimal_places: c.decimalPlaces, conversion_provider_id: c.conversionProviderId, price_source: c.priceSource }, k);
+export const updateCurrency = (code: string, changes: { enabled?: boolean; name?: string; symbol?: string }, version: number, k: Key = {}) =>
+  put(`/currencies/${encodeURIComponent(code)}`, { enabled: changes.enabled, name: changes.name, symbol: changes.symbol, version }, k);
+
+// A switch flip and a message change are the same PUT; a field left out is not changed.
+export const updateService = (code: string, changes: { enabled?: boolean; disabledMessage?: string }, version: number, k: Key = {}) =>
+  put(`/services/${encodeURIComponent(code)}`, { enabled: changes.enabled, disabled_message: changes.disabledMessage, version }, k);
+
 // Only the kind's own field carries a value: themes `finish`, swatches `hex_color`, patterns `pattern`.
 export type DesignInput = { id: string; kind: "theme" | "swatch" | "pattern"; name: string; finish: string; hexColor: string | null; pattern: string | null; enabled: boolean; sortOrder: number };
 const designBody = (d: DesignInput) => ({ id: d.id, kind: d.kind, name: d.name, finish: d.finish, hex_color: d.hexColor, pattern: d.pattern, enabled: d.enabled, sort_order: d.sortOrder });

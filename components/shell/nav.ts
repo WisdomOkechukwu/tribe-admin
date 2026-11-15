@@ -11,6 +11,7 @@ export const NAV: { href: string; label: string; icon: IconName; perm: string; m
   { href: "/inventory", label: "Inventory", icon: "inventory", perm: "inventory.view", match: (p) => p.startsWith("/inventory") },
   { href: "/ledger", label: "Ledger", icon: "ledger", perm: "ledger.view", match: (p) => p.startsWith("/ledger") },
   { href: "/providers", label: "Providers", icon: "providers", perm: "providers.view", match: (p) => p.startsWith("/providers") },
+  { href: "/services", label: "Services", icon: "lock", perm: "services.view", match: (p) => p.startsWith("/services") },
   { href: "/card-designs", label: "Card designs", icon: "card", perm: "card_designs.manage", match: (p) => p.startsWith("/card-designs") },
   { href: "/verifications", label: "Verifications", icon: "kyc", perm: "kyc.view", match: (p) => p.startsWith("/verifications") },
   { href: "/audit", label: "Audit log", icon: "audit", perm: "audit.view", match: (p) => p.startsWith("/audit") },
